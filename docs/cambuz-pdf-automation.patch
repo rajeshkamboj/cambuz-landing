@@ -1,0 +1,632 @@
+From 18faeeb820c79f018fe8b23d6710e9871f1580bb Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Sun, 11 Oct 2026 23:57:40 +0000
+Subject: [PATCH] feat: publish and sync downloads after main builds
+
+---
+ .github/workflows/desktop-build.yml  | 128 ++++++++++++++---
+ README.md                            |  22 +++
+ docs/landing-content.json            |  96 +++++++++++++
+ scripts/sync-release-readme.mjs      | 206 +++++++++++++++++++++++++++
+ scripts/validate-landing-content.mjs |  58 ++++++++
+ 5 files changed, 491 insertions(+), 19 deletions(-)
+ create mode 100644 docs/landing-content.json
+ create mode 100644 scripts/sync-release-readme.mjs
+ create mode 100644 scripts/validate-landing-content.mjs
+
+diff --git a/.github/workflows/desktop-build.yml b/.github/workflows/desktop-build.yml
+index 0573463..e75d732 100644
+--- a/.github/workflows/desktop-build.yml
++++ b/.github/workflows/desktop-build.yml
+@@ -41,6 +41,8 @@ jobs:
+           cache: npm
+       - run: npm ci
+       - run: npm test
++      - name: Validate landing content contract
++        run: node scripts/validate-landing-content.mjs
+       - uses: actions/setup-python@v6
+         with:
+           python-version: '3.12'
+@@ -261,19 +263,18 @@ jobs:
+           if-no-files-found: error
+           retention-days: 30
+ 
+-  # Publishes the raw installers as GitHub Release assets (direct .exe, .AppImage,
+-  # .dmg and .zip download links) when a version tag such as v1.1.0 is pushed.
+-  # Tags containing a hyphen (for example v1.1.0-rc1) are marked as pre-releases.
+-  # Windows is the gating platform; Linux and macOS are attached when their
+-  # experimental builds succeeded.
++  # Each successful merge to main publishes raw installers at a unique public
++  # pre-release tag. Intentional v* tags remain supported for promotions.
+   release:
+-    name: Publish GitHub Release assets
+-    # `always()` is required. Without it GitHub applies the default success()
+-    # status check to this `if`, so a failed — or merely cancelled — experimental
+-    # Linux/macOS job would silently skip the release even though those jobs are
+-    # explicitly optional and their downloads are allowed to fail. Windows is
+-    # the gate: a broken Windows build still publishes nothing.
+-    if: always() && startsWith(github.ref, 'refs/tags/v') && needs.windows-x64.result == 'success'
++    name: Publish automatic GitHub Release assets
++    # A successful merge to main becomes a public, pinned pre-release. Tagged
++    # releases remain supported for intentional promotions. All five public
++    # downloads must be present: the landing site never advertises a partial
++    # multi-platform release.
++    if: >-
++      always() && needs.windows-x64.result == 'success' &&
++      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
++      startsWith(github.ref, 'refs/tags/v'))
+     needs: [windows-x64, linux-x64, macos-arm64]
+     runs-on: ubuntu-24.04
+     timeout-minutes: 20
+@@ -282,7 +283,7 @@ jobs:
+     env:
+       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+       GH_REPO: ${{ github.repository }}
+-      TAG: ${{ github.ref_name }}
++      CAMBUZ_LANDING_DISPATCH_TOKEN: ${{ secrets.CAMBUZ_LANDING_DISPATCH_TOKEN }}
+     steps:
+       # Each artifact goes to its own folder: the platforms each ship a
+       # SHA256SUMS.txt, so merging them into one directory would overwrite files.
+@@ -311,19 +312,108 @@ jobs:
+           find release-src -type f \( -name '*-setup.exe' -o -name '*-portable.exe' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.zip' \) -exec cp {} release-out/ \;
+           cd release-out
+           ls -la
+-          test -n "$(ls *-setup.exe)" && test -n "$(ls *-portable.exe)"
++          for pattern in '*-setup.exe' '*-portable.exe' '*.AppImage' '*.dmg' '*.zip'; do
++            count="$(find . -maxdepth 1 -type f -name "$pattern" -printf . | wc -c)"
++            test "$count" -eq 1 || { echo "Expected exactly one $pattern, found $count" >&2; exit 1; }
++          done
+           sha256sum * > SHA256SUMS.txt
+           cat SHA256SUMS.txt
++      - name: Choose an immutable release tag
++        id: release_tag
++        shell: bash
++        run: |
++          set -euo pipefail
++          version="$(node -p "require('./package.json').version")"
++          if [[ "$GITHUB_REF" == 'refs/heads/main' ]]; then
++            # run_number is stable for a re-run, so a re-run repairs the same
++            # release instead of pointing the public site at a second build.
++            tag="v${version}-build.${GITHUB_RUN_NUMBER}"
++            prerelease='true'
++          else
++            tag="$GITHUB_REF_NAME"
++            prerelease='false'
++            [[ "$tag" == *-* ]] && prerelease='true'
++          fi
++          echo "tag=$tag" >> "$GITHUB_OUTPUT"
++          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+       - name: Create or update the GitHub Release
++        env:
++          TAG: ${{ steps.release_tag.outputs.tag }}
++          PRERELEASE: ${{ steps.release_tag.outputs.prerelease }}
+         shell: bash
+         run: |
+           set -euo pipefail
+-          prerelease_flag=""
+-          if [[ "$TAG" == *-* ]]; then prerelease_flag="--prerelease"; fi
++          prerelease_flag=()
++          [[ "$PRERELEASE" == 'true' ]] && prerelease_flag=(--prerelease)
+           if gh release view "$TAG" >/dev/null 2>&1; then
+             gh release upload "$TAG" release-out/* --clobber
+           else
+-            gh release create "$TAG" release-out/* --verify-tag --title "Cambuz PDF Reader $TAG" \
+-              --notes "Unsigned builds for Windows x64 (installer and portable), Linux x64 (AppImage, experimental) and macOS Apple Silicon (DMG and ZIP, experimental). Verify downloads with SHA256SUMS.txt." \
+-              $prerelease_flag
++            common=(
++              --title "Cambuz PDF Reader $TAG"
++              --notes "Automatic unsigned build from $GITHUB_SHA. Windows x64 is CI-verified; Linux x64 and macOS Apple Silicon are experimental. Verify downloads with SHA256SUMS.txt."
++              "${prerelease_flag[@]}"
++            )
++            if [[ "$GITHUB_REF" == 'refs/heads/main' ]]; then
++              # There is no remote tag yet for automatic builds. GitHub creates
++              # one at exactly this tested commit while making the release.
++              gh release create "$TAG" release-out/* --target "$GITHUB_SHA" "${common[@]}"
++            else
++              # A manually pushed tag must already exist and is never moved by
++              # this job.
++              gh release create "$TAG" release-out/* --verify-tag "${common[@]}"
++            fi
++          fi
++      # The cross-repository sync follows automatic main builds. A manually
++      # pushed tag can still publish a release, but cannot move the README or
++      # landing site backward from a different commit.
++      - name: Check out the source commit for README sync
++        if: github.ref == 'refs/heads/main'
++        uses: actions/checkout@v7
++        with:
++          ref: ${{ github.sha }}
++          persist-credentials: true
++      - name: Update README with the published asset URLs and checksums
++        if: github.ref == 'refs/heads/main'
++        env:
++          TAG: ${{ steps.release_tag.outputs.tag }}
++        shell: bash
++        run: |
++          set -euo pipefail
++          node scripts/sync-release-readme.mjs \
++            --tag "$TAG" \
++            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
++            --source-sha "$GITHUB_SHA"
++      - name: Commit README metadata
++        if: github.ref == 'refs/heads/main'
++        id: readme_commit
++        shell: bash
++        run: |
++          set -euo pipefail
++          if git diff --quiet -- README.md; then
++            echo 'changed=false' >> "$GITHUB_OUTPUT"
++            exit 0
++          fi
++          git config user.name 'cambuz-release-sync[bot]'
++          git config user.email 'cambuz-release-sync[bot]@users.noreply.github.com'
++          git add README.md
++          git commit -m "docs(downloads): sync ${{ steps.release_tag.outputs.tag }}"
++          git push origin HEAD:main
++          echo 'changed=true' >> "$GITHUB_OUTPUT"
++      - name: Notify the landing site
++        if: github.ref == 'refs/heads/main'
++        env:
++          TAG: ${{ steps.release_tag.outputs.tag }}
++        shell: bash
++        run: |
++          set -euo pipefail
++          if [[ -z "$CAMBUZ_LANDING_DISPATCH_TOKEN" ]]; then
++            echo 'CAMBUZ_LANDING_DISPATCH_TOKEN is not configured; the landing hourly repair sync will catch this release.'
++            exit 0
+           fi
++          curl --fail-with-body --silent --show-error \
++            --request POST \
++            --header "Accept: application/vnd.github+json" \
++            --header "Authorization: Bearer $CAMBUZ_LANDING_DISPATCH_TOKEN" \
++            --header "X-GitHub-Api-Version: 2022-11-28" \
++            https://api.github.com/repos/rajeshkamboj/cambuz-landing/dispatches \
++            --data "$(jq -nc --arg tag "$TAG" --arg sha "$GITHUB_SHA" '{event_type: "cambuz-release-published", client_payload: {tag: $tag, source_sha: $sha}}')"
+diff --git a/README.md b/README.md
+index 6c5bc36..2e0a62d 100644
+--- a/README.md
++++ b/README.md
+@@ -11,8 +11,10 @@
+ 
+ <p align="center">
+   <a href="https://github.com/rajeshkamboj/cambuz-pdf/actions/workflows/desktop-build.yml"><img src="https://github.com/rajeshkamboj/cambuz-pdf/actions/workflows/desktop-build.yml/badge.svg?branch=main" alt="Desktop builds status (main)" /></a>
++<!-- release-sync:badge:start -->
+   <a href="https://github.com/rajeshkamboj/cambuz-pdf/releases/tag/v1.1.0-rc1"><img src="https://img.shields.io/badge/download-v1.1.0--rc1-success" alt="Download v1.1.0-rc1" /></a>
+   <img src="https://img.shields.io/badge/version-1.1.0--pre--release-informational" alt="Version 1.1.0 pre-release" />
++<!-- release-sync:badge:end -->
+   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+   <img src="https://img.shields.io/badge/Windows%20x64-primary-0078D6" alt="Windows x64 (primary target)" />
+   <img src="https://img.shields.io/badge/Linux%20x64-experimental-orange" alt="Linux x64 (experimental)" />
+@@ -30,6 +32,7 @@
+ 
+ ## ⬇️ Download Cambuz
+ 
++<!-- release-sync:downloads:start -->
+ > **How downloads work right now:** version **1.1.0** is published as the
+ > **[v1.1.0-rc1 pre-release][release-page]**, so the links below are permanent
+ > release-asset links — no GitHub account needed and no 30-day CI expiry.
+@@ -72,6 +75,7 @@ Verify after download: `Get-FileHash -Algorithm SHA256 <file>` (PowerShell) or
+ unsigned, so the checksum is how you confirm a file is the one CI produced.
+ 
+ </details>
++<!-- release-sync:downloads:end -->
+ 
+ **At a glance:** version 1.1.0 (pre-release) · app ID `com.cambuz.pdfreader` · publisher
+ Cambuz · MIT licence with [third-party notices](THIRD-PARTY-NOTICES.md) · no telemetry ·
+@@ -348,6 +352,22 @@ The reading feature set was audited against mainstream readers — what exists,
+ missing and in what order it is worth closing:
+ [feature audit](docs/FEATURE-AUDIT.md).
+ 
++### Landing site sync
++
++Every successful `main` build that produces all five advertised installers now
++publishes an automatic, pinned pre-release (`v<package-version>-build.<run-number>`).
++The release job reads the published
++asset metadata back from GitHub, then refreshes the marked download block in
++this README with direct URLs, exact sizes and SHA-256 values. It also asks
++`cambuz-landing` to verify the same release and update its public download page.
++
++[`docs/landing-content.json`](docs/landing-content.json) is the reviewed
++machine-readable source for the landing Features page. When a PR adds or changes
++a user-visible feature, update this file alongside the README and tests. CI
++validates the contract before a release is allowed; the downstream site copies it
++only after the assets are public. Use an existing `screenshotId` when a genuine
++landing screenshot already exists, or omit it so the site shows a placeholder.
++
+ Contributions are welcome — please open an issue first for anything beyond a small fix,
+ and keep changes covered by `npm test`. No new release or signing automation is produced
+ by this documentation; publishing is a maintainer decision tracked in DEVELOPMENT.md.
+@@ -371,6 +391,7 @@ with bundled third-party components listed with full license texts in
+   [1.1.0 pre-release notes](docs/RELEASE-NOTES-1.1.0.md) ·
+   [Windows acceptance checklist](docs/WINDOWS-ACCEPTANCE-CHECKLIST.md)
+ 
++<!-- release-sync:links:start -->
+ [release-page]: https://github.com/rajeshkamboj/cambuz-pdf/releases/tag/v1.1.0-rc1
+ [win-setup-dl]: https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-rc1/Cambuz-PDF-Reader-1.1.0-win-x64-setup.exe
+ [win-portable-dl]: https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-rc1/Cambuz-PDF-Reader-1.1.0-win-x64-portable.exe
+@@ -378,3 +399,4 @@ with bundled third-party components listed with full license texts in
+ [mac-dmg-dl]: https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-rc1/Cambuz-PDF-Reader-1.1.0-mac-arm64.dmg
+ [mac-zip-dl]: https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-rc1/Cambuz-PDF-Reader-1.1.0-mac-arm64.zip
+ [sums-dl]: https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-rc1/SHA256SUMS.txt
++<!-- release-sync:links:end -->
+diff --git a/docs/landing-content.json b/docs/landing-content.json
+new file mode 100644
+index 0000000..4fd41b4
+--- /dev/null
++++ b/docs/landing-content.json
+@@ -0,0 +1,96 @@
++{
++  "schemaVersion": 1,
++  "releaseNotesPath": "docs/RELEASE-NOTES-1.1.0.md",
++  "features": [
++    {
++      "id": "reading",
++      "headline": "Just you and the document.",
++      "description": "Cambuz opens PDFs in a clean reading interface with nothing competing for your attention. Navigate pages, zoom in and out, and switch between fit modes to read comfortably at any size.",
++      "bullets": [
++        "Continuous scrolling and page-by-page navigation",
++        "Zoom controls with fit-width and fit-page modes",
++        "Thumbnail sidebar for quick page jumping",
++        "Dark reading surface for low-light environments"
++      ],
++      "screenshotAlt": "Cambuz PDF Reader showing a clean document view with page navigation controls",
++      "screenshotCaption": "The main reading interface with page navigation and zoom controls",
++      "icon": "BookOpen",
++      "screenshotId": "reading"
++    },
++    {
++      "id": "search",
++      "headline": "Search less. Find more.",
++      "description": "Find any word or phrase across an entire PDF. Cambuz highlights every match and lets you jump between results without losing your place.",
++      "bullets": [
++        "Full-text search across the entire document",
++        "Highlighted match results with context",
++        "Next and previous result navigation",
++        "Match counter showing total results found"
++      ],
++      "screenshotAlt": "Cambuz PDF Reader search panel with highlighted search results in a document",
++      "screenshotCaption": "Search results highlighted with navigation between matches",
++      "icon": "Search",
++      "screenshotId": "search"
++    },
++    {
++      "id": "selection",
++      "headline": "Select. Copy. Keep moving.",
++      "description": "Select text directly in the PDF and copy it to the clipboard for use anywhere. Cambuz extracts the text embedded in the document so you can paste it into notes, emails, or any other application.",
++      "bullets": [
++        "Click and drag to select text",
++        "Keyboard shortcut to copy selected text",
++        "Works with standard text-based PDFs",
++        "Selection quality depends on document font encoding"
++      ],
++      "screenshotAlt": "Cambuz PDF Reader with text selected in a document ready for copying",
++      "screenshotCaption": "Text selection in a PDF document ready to copy",
++      "icon": "MousePointer2",
++      "screenshotId": "selection"
++    },
++    {
++      "id": "print",
++      "headline": "From PDF to paper.",
++      "description": "Print any PDF directly from Cambuz with a standard print preview. Choose your printer, select a page range, and send it to paper without leaving the reader.",
++      "bullets": [
++        "Print preview before committing to paper",
++        "Select specific pages or page ranges",
++        "Works with any installed Windows printer",
++        "Standard print dialog with paper size options"
++      ],
++      "screenshotAlt": "Cambuz PDF Reader print preview dialog showing page range options",
++      "screenshotCaption": "Print preview with page range selection",
++      "icon": "Printer",
++      "screenshotId": "print"
++    },
++    {
++      "id": "languages",
++      "headline": "Made for the documents you actually read.",
++      "description": "Cambuz displays Hindi and Punjabi PDF documents correctly. Text extraction from these documents depends on the font encoding used when the PDF was created.",
++      "bullets": [
++        "Renders Hindi (Devanagari) script PDFs",
++        "Renders Punjabi (Gurmukhi) script PDFs",
++        "Displays embedded fonts as authored",
++        "Text extraction depends on document encoding"
++      ],
++      "screenshotAlt": "Cambuz PDF Reader displaying a Hindi language PDF document in Devanagari script",
++      "screenshotCaption": "A Hindi-language PDF rendered in Cambuz",
++      "icon": "Languages",
++      "screenshotId": "languages"
++    },
++    {
++      "id": "desktop",
++      "headline": "A desktop tool, not another upload form.",
++      "description": "Cambuz is a desktop application. It opens files from your computer. It is not a browser-based PDF editor or an upload service. You install it once and use it locally.",
++      "bullets": [
++        "Native desktop application for Windows",
++        "Opens files from your local filesystem",
++        "No browser tab or upload required",
++        "No account or sign-in needed"
++      ],
++      "screenshotAlt": "Cambuz PDF Reader desktop application window on Windows",
++      "screenshotCaption": "Cambuz running as a native desktop application",
++      "icon": "Monitor",
++      "screenshotId": "desktop"
++    }
++  ]
++}
+diff --git a/scripts/sync-release-readme.mjs b/scripts/sync-release-readme.mjs
+new file mode 100644
+index 0000000..fc886e9
+--- /dev/null
++++ b/scripts/sync-release-readme.mjs
+@@ -0,0 +1,206 @@
++#!/usr/bin/env node
++/**
++ * Write the published release facts into README.md.
++ *
++ * The release job calls this only after GitHub has accepted every asset. It
++ * fetches the release record back from the GitHub API, so README sizes, direct
++ * URLs and SHA-256 values describe the published files rather than the local
++ * staging directory. The text between the HTML markers in README.md is owned
++ * by this script; product documentation outside those markers remains human
++ * authored.
++ */
++
++import { readFile, writeFile } from 'node:fs/promises';
++import { dirname, join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++
++const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
++const README = join(ROOT, 'README.md');
++const REPOSITORY = process.env.GITHUB_REPOSITORY || 'rajeshkamboj/cambuz-pdf';
++const API_ROOT = `https://api.github.com/repos/${REPOSITORY}`;
++
++const artifactDefinitions = [
++  {
++    key: 'setup',
++    suffix: '-win-x64-setup.exe',
++    platform: '**Windows 10/11 · x64** *(recommended)*',
++    purpose: 'Normal install: pick a folder, Start Menu entry, optional `.pdf` association. Per-user, no admin rights.',
++    label: 'Download installer',
++  },
++  {
++    key: 'portable',
++    suffix: '-win-x64-portable.exe',
++    platform: 'Windows 10/11 · x64',
++    purpose: 'No install at all — run from Desktop, Downloads or a USB stick (it extracts itself at launch).',
++    label: 'Download portable',
++  },
++  {
++    key: 'appimage',
++    suffix: '-linux-x86_64.AppImage',
++    platform: 'Linux x64 *(experimental)*',
++    purpose: 'Try Cambuz on Linux; single-file AppImage.',
++    label: 'Download AppImage',
++  },
++  {
++    key: 'dmg',
++    suffix: '-mac-arm64.dmg',
++    platform: 'macOS 13+ · Apple Silicon *(experimental)*',
++    purpose: 'Drag-to-Applications disk image; unsigned and not notarized.',
++    label: 'Download DMG',
++  },
++  {
++    key: 'zip',
++    suffix: '-mac-arm64.zip',
++    platform: 'macOS 13+ · Apple Silicon *(experimental)*',
++    purpose: 'Same app bundle as a plain ZIP.',
++    label: 'Download ZIP',
++  },
++];
++
++function fail(message) {
++  throw new Error(`sync-release-readme: ${message}`);
++}
++
++function parseArguments(args) {
++  const options = { tag: undefined, runUrl: undefined, sourceSha: undefined };
++  for (let index = 0; index < args.length; index += 1) {
++    const option = args[index];
++    if (!['--tag', '--run-url', '--source-sha'].includes(option)) {
++      fail(`unknown option ${option}`);
++    }
++    const value = args[index + 1];
++    if (!value || value.startsWith('--')) fail(`${option} needs a value`);
++    options[option.slice(2).replace(/-([a-z])/g, (_, char) => char.toUpperCase())] = value;
++    index += 1;
++  }
++  if (!options.tag || !options.runUrl || !options.sourceSha) {
++    fail('usage: --tag <published-tag> --run-url <workflow-url> --source-sha <commit>');
++  }
++  if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(options.tag)) fail('invalid release tag');
++  if (!/^https:\/\/github\.com\//.test(options.runUrl)) fail('run URL must be a GitHub URL');
++  if (!/^[0-9a-f]{7,64}$/i.test(options.sourceSha)) fail('source SHA must be a commit hash');
++  return options;
++}
++
++function headers() {
++  const output = {
++    accept: 'application/vnd.github+json',
++    'user-agent': 'cambuz-readme-release-sync',
++    'x-github-api-version': '2022-11-28',
++  };
++  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
++  if (token) output.authorization = `Bearer ${token}`;
++  return output;
++}
++
++async function releaseFor(tag) {
++  const response = await fetch(`${API_ROOT}/releases/tags/${encodeURIComponent(tag)}`, {
++    headers: headers(),
++  });
++  if (!response.ok) fail(`GitHub API returned ${response.status} for release ${tag}`);
++  const release = await response.json();
++  if (release.tag_name !== tag || !Array.isArray(release.assets)) fail('release response is malformed');
++  return release;
++}
++
++function digestFor(asset) {
++  const match = /^sha256:([a-f0-9]{64})$/i.exec(asset.digest ?? '');
++  if (!match) fail(`${asset.name} has no GitHub SHA-256 digest`);
++  return match[1].toLowerCase();
++}
++
++function toMiB(bytes) {
++  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
++}
++
++function extractAssets(release) {
++  const assets = {};
++  for (const definition of artifactDefinitions) {
++    const matches = release.assets.filter((asset) => asset.name?.endsWith(definition.suffix));
++    if (matches.length !== 1) fail(`expected one ${definition.suffix} asset, found ${matches.length}`);
++    const [asset] = matches;
++    if (!Number.isSafeInteger(asset.size) || !/^https:\/\/github\.com\//.test(asset.browser_download_url ?? '')) {
++      fail(`invalid published asset ${asset.name}`);
++    }
++    assets[definition.key] = {
++      ...definition,
++      fileName: asset.name,
++      url: asset.browser_download_url,
++      bytes: asset.size,
++      sha256: digestFor(asset),
++    };
++  }
++  const sums = release.assets.find((asset) => asset.name === 'SHA256SUMS.txt');
++  if (!sums || !/^https:\/\/github\.com\//.test(sums.browser_download_url ?? '')) {
++    fail('release is missing a public SHA256SUMS.txt');
++  }
++  return { assets, sums };
++}
++
++function between(source, name, replacement) {
++  const begin = `<!-- release-sync:${name}:start -->`;
++  const end = `<!-- release-sync:${name}:end -->`;
++  const start = source.indexOf(begin);
++  const finish = source.indexOf(end);
++  if (start < 0 || finish < 0 || finish < start) fail(`README is missing ${name} markers`);
++  return `${source.slice(0, start + begin.length)}\n${replacement}\n${source.slice(finish)}`;
++}
++
++function renderBadge(release, version) {
++  const tagForBadge = release.tag_name.replace(/-/g, '--');
++  const kind = release.prerelease ? 'pre--release' : 'release';
++  return `  <a href="${release.html_url}"><img src="https://img.shields.io/badge/download-${tagForBadge}-success" alt="Download ${release.tag_name}" /></a>\n  <img src="https://img.shields.io/badge/version-${version}--${kind}-informational" alt="Version ${version} ${release.prerelease ? 'pre-release' : 'release'}" />`;
++}
++
++function renderDownloadSection(release, version, assets, sums, runUrl, sourceSha) {
++  const kind = release.prerelease ? 'automatic pre-release' : 'release';
++  const rows = artifactDefinitions
++    .map((definition) => {
++      const asset = assets[definition.key];
++      return `| ${definition.platform} | \`${asset.fileName}\` | ${definition.purpose} | ${toMiB(asset.bytes)} | **[${definition.label}](${asset.url})** |`;
++    })
++    .join('\n');
++  const checksumRows = artifactDefinitions
++    .map((definition) => {
++      const asset = assets[definition.key];
++      return `| \`${asset.fileName}\` | \`${asset.sha256}\` |`;
++    })
++    .join('\n');
++
++  return `> **How downloads work:** version **${version}** is published as the\n> **[${release.tag_name} ${kind}](${release.html_url})**. The links below are\n> permanent public release-asset URLs — no GitHub account and no 30-day CI\n> expiry. The builds are **unsigned**: expect SmartScreen and Gatekeeper warnings.\n> This build is produced automatically after a merge to \`main\`; use it as a\n> pre-release build and report problems before relying on it in production.\n\nEvery file below was built from commit \`${sourceSha.slice(0, 10)}\` in\n[CI run](${runUrl}) and attached to the [${release.tag_name} release page](${release.html_url}).\n\n| Platform & architecture | File | Best for | Size | Download |\n| --- | --- | --- | ---: | --- |\n${rows}\n| Windows arm64, Intel Mac, Linux arm64 | — | Not built | — | *unavailable* |\n\nAll five files, plus [\`SHA256SUMS.txt\`](${sums.browser_download_url}), are listed\non the [${release.tag_name} release page](${release.html_url}). Every push to\n\`main\` now receives a public automatic pre-release; the link stays pinned to\nthis exact build rather than to an ambiguous “latest” release.\n\n<details>\n<summary><strong>SHA-256 checksums for the ${release.tag_name} files</strong> (published as <code>SHA256SUMS.txt</code> on the release)</summary>\n\n| File | SHA-256 |\n| --- | --- |\n${checksumRows}\n\nVerify after download: \`Get-FileHash -Algorithm SHA256 <file>\` (PowerShell) or\n\`sha256sum -c SHA256SUMS.txt\` (Linux/macOS, next to the downloaded files). The\nbuilds are unsigned, so the checksum is how you confirm a file is the one CI\nproduced.\n\n</details>`;
++}
++
++function renderLinks(release, assets, sums) {
++  const definitions = [
++    ['release-page', release.html_url],
++    ['win-setup-dl', assets.setup.url],
++    ['win-portable-dl', assets.portable.url],
++    ['linux-dl', assets.appimage.url],
++    ['mac-dmg-dl', assets.dmg.url],
++    ['mac-zip-dl', assets.zip.url],
++    ['sums-dl', sums.browser_download_url],
++  ];
++  return definitions.map(([name, url]) => `[${name}]: ${url}`).join('\n');
++}
++
++async function main() {
++  const options = parseArguments(process.argv.slice(2));
++  const release = await releaseFor(options.tag);
++  const version = options.tag.replace(/^v/, '').replace(/-.*$/, '');
++  const { assets, sums } = extractAssets(release);
++  let readme = await readFile(README, 'utf8');
++  readme = between(readme, 'badge', renderBadge(release, version));
++  readme = between(
++    readme,
++    'downloads',
++    renderDownloadSection(release, version, assets, sums, options.runUrl, options.sourceSha)
++  );
++  readme = between(readme, 'links', renderLinks(release, assets, sums));
++  await writeFile(README, readme);
++  console.log(`README now describes the published ${release.tag_name} release.`);
++}
++
++main().catch((error) => {
++  console.error(error.message ?? String(error));
++  process.exitCode = 1;
++});
+diff --git a/scripts/validate-landing-content.mjs b/scripts/validate-landing-content.mjs
+new file mode 100644
+index 0000000..bf30af1
+--- /dev/null
++++ b/scripts/validate-landing-content.mjs
+@@ -0,0 +1,58 @@
++#!/usr/bin/env node
++/** Validate the small product-content contract consumed by cambuz-landing. */
++
++import { readFile } from 'node:fs/promises';
++import { dirname, join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++
++const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
++const MANIFEST = join(ROOT, 'docs', 'landing-content.json');
++
++function fail(message) {
++  throw new Error(`validate-landing-content: ${message}`);
++}
++
++function string(value, label, max = 600) {
++  if (typeof value !== 'string' || value.trim().length === 0 || value.length > max) {
++    fail(`${label} must be a non-empty string of at most ${max} characters`);
++  }
++}
++
++let content;
++try {
++  content = JSON.parse(await readFile(MANIFEST, 'utf8'));
++} catch (error) {
++  fail(`cannot parse docs/landing-content.json: ${error.message}`);
++}
++
++if (!content || typeof content !== 'object' || Array.isArray(content)) fail('manifest must be an object');
++if (content.schemaVersion !== 1) fail('schemaVersion must be 1');
++string(content.releaseNotesPath, 'releaseNotesPath', 180);
++if (!/^[A-Za-z0-9._/-]+\.md$/.test(content.releaseNotesPath) || content.releaseNotesPath.includes('..')) {
++  fail('releaseNotesPath must be a repository-relative Markdown path');
++}
++if (!Array.isArray(content.features) || content.features.length < 1 || content.features.length > 20) {
++  fail('features must contain 1 to 20 entries');
++}
++
++const ids = new Set();
++for (const [index, feature] of content.features.entries()) {
++  if (!feature || typeof feature !== 'object' || Array.isArray(feature)) fail(`features[${index}] must be an object`);
++  string(feature.id, `features[${index}].id`, 48);
++  if (!/^[a-z0-9-]+$/.test(feature.id) || ids.has(feature.id)) {
++    fail(`features[${index}].id must be unique lowercase kebab-case`);
++  }
++  ids.add(feature.id);
++  for (const field of ['headline', 'description', 'screenshotAlt', 'screenshotCaption', 'icon']) {
++    string(feature[field], `features[${index}].${field}`);
++  }
++  if (feature.screenshotId !== undefined) string(feature.screenshotId, `features[${index}].screenshotId`, 48);
++  if (!Array.isArray(feature.bullets) || feature.bullets.length < 1 || feature.bullets.length > 8) {
++    fail(`features[${index}].bullets must contain 1 to 8 strings`);
++  }
++  feature.bullets.forEach((bullet, bulletIndex) =>
++    string(bullet, `features[${index}].bullets[${bulletIndex}]`, 220)
++  );
++}
++
++console.log(`landing content: OK (${content.features.length} features)`);
+-- 
+2.39.5
+
