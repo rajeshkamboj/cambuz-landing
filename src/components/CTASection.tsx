@@ -1,5 +1,4 @@
 import { ButtonLink } from './ButtonLink';
-import { Download, ArrowRight } from 'lucide-react';
 
 interface CTASectionProps {
   title?: string;

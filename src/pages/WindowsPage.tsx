@@ -1,6 +1,7 @@
-import { Check, Monitor, Download, Zap, Shield } from 'lucide-react';
+import { Check, Monitor, Zap, Shield } from 'lucide-react';
 import { useSeo } from '@/hooks/useSeo';
-import { siteConfig } from '@/config/site';
+import { siteConfig, downloadArtifacts, formatMiB } from '@/config/site';
+import { Link } from 'react-router-dom';
 import { ButtonLink } from '@/components/ButtonLink';
 import { Screenshot } from '@/components/Screenshot';
 import { SectionHeading } from '@/components/SectionHeading';
@@ -11,6 +12,9 @@ import { faqItems } from '@/data/faq';
 import { screenshots } from '@/data/screenshots';
 
 const windowsFaq = faqItems.filter((_, i) => [0, 1, 2, 3, 4, 5, 10].includes(i));
+
+const installer = downloadArtifacts.find((a) => a.id === 'win-x64-setup')!;
+const portable = downloadArtifacts.find((a) => a.id === 'win-x64-portable')!;
 
 export function WindowsPage() {
   useSeo(
@@ -53,13 +57,20 @@ export function WindowsPage() {
             and a portable executable.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4">
-            <ButtonLink to="/download/" size="lg" icon="download">
+            <ButtonLink to={installer.url} external size="lg" icon="download">
               Download for Windows
             </ButtonLink>
             <ButtonLink to="/features/" size="lg" variant="secondary">
               See all features
             </ButtonLink>
           </div>
+          <p className="mt-4 text-sm text-text-secondary">
+            {formatMiB(installer.bytes)} installer · v{siteConfig.version}{' '}
+            pre-release, unsigned ·{' '}
+            <Link to="/download/" className="text-accent hover:text-primary transition-colors">
+              all Windows builds
+            </Link>
+          </p>
         </div>
       </section>
 
@@ -160,28 +171,54 @@ export function WindowsPage() {
               </h3>
               <p className="text-sm text-text-secondary leading-relaxed">
                 Download the installer, double-click to run it, and follow the
-                setup wizard. Cambuz will be added to your Start menu and can be
-                set as your default PDF reader.
+                setup wizard. Cambuz is added to your Start menu, and you can
+                register it as a PDF handler without giving up control of your
+                default reader. The install is per-user — no admin rights.
               </p>
+              <p className="mt-3 text-xs text-text-secondary font-mono">
+                {installer.fileName} · {formatMiB(installer.bytes)}
+              </p>
+              <div className="mt-4">
+                <ButtonLink to={installer.url} external icon="download">
+                  Download installer
+                </ButtonLink>
+              </div>
             </div>
             <div className="p-6 rounded-xl bg-surface/50 border border-border-default">
               <h3 className="text-base font-semibold text-text-main mb-3">
                 Portable
               </h3>
               <p className="text-sm text-text-secondary leading-relaxed">
-                Download the portable executable and run it directly. No
-                installation is required, making it ideal for USB drives or
-                environments where you cannot install software.
+                Download the portable executable and run it directly. Nothing is
+                installed — it extracts itself at launch, which makes it ideal
+                for USB drives or machines where you cannot install software.
               </p>
+              <p className="mt-3 text-xs text-text-secondary font-mono">
+                {portable.fileName} · {formatMiB(portable.bytes)}
+              </p>
+              <div className="mt-4">
+                <ButtonLink to={portable.url} external icon="download">
+                  Download portable
+                </ButtonLink>
+              </div>
             </div>
             <div className="p-6 rounded-xl bg-yellow-500/5 border border-yellow-500/20">
               <h3 className="text-base font-semibold text-yellow-400 mb-2">
                 About SmartScreen warnings
               </h3>
               <p className="text-sm text-text-secondary leading-relaxed">
-                Cambuz builds are currently unsigned. Windows SmartScreen may
-                show a warning. Click "More info" then "Run anyway" to proceed.
-                Never disable Windows security protections.
+                Cambuz builds are currently unsigned, so Windows SmartScreen may
+                show a warning. Verify the file against{' '}
+                <a
+                  href={siteConfig.checksumsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:text-primary transition-colors"
+                >
+                  {siteConfig.checksumsFileName}
+                </a>
+                , then click "More info" and "Run anyway" to proceed. Never
+                disable Windows security protections.
               </p>
             </div>
           </div>

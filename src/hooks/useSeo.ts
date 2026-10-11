@@ -76,7 +76,15 @@ export function useSeo(meta: SeoMeta, jsonLd?: object) {
       'meta'
     );
 
+    // Social card: absolute URL + dimensions so scrapers never have to guess.
+    const socialImage = `${siteConfig.productionDomain}/social/og-image.png`;
+    setOrCreateTag('meta[property="og:image"]', 'content', socialImage, 'meta');
+    setOrCreateTag('meta[property="og:image:type"]', 'content', 'image/png', 'meta');
+    setOrCreateTag('meta[property="og:image:width"]', 'content', '1200', 'meta');
+    setOrCreateTag('meta[property="og:image:height"]', 'content', '630', 'meta');
+
     setOrCreateTag('meta[name="twitter:card"]', 'content', 'summary_large_image', 'meta');
+    setOrCreateTag('meta[name="twitter:image"]', 'content', socialImage, 'meta');
     setOrCreateTag('meta[name="twitter:title"]', 'content', fullTitle, 'meta');
     setOrCreateTag(
       'meta[name="twitter:description"]',

@@ -1,35 +1,47 @@
 import { useState } from 'react';
 import {
-  Download,
-  Check,
   AlertTriangle,
-  Monitor,
   Apple,
-  Terminal,
+  Check,
+  ExternalLink,
+  FileCheck2,
   FileText,
-  ShieldCheck,
   Info,
+  Monitor,
+  Terminal,
 } from 'lucide-react';
 import { useSeo } from '@/hooks/useSeo';
-import { siteConfig, downloadArtifacts, type DownloadArtifact } from '@/config/site';
+import {
+  siteConfig,
+  downloadArtifacts,
+  unsupportedPlatforms,
+  formatMiB,
+  type DownloadArtifact,
+  type Platform,
+} from '@/config/site';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SectionHeading } from '@/components/SectionHeading';
 import { CTASection } from '@/components/CTASection';
+import { ButtonLink } from '@/components/ButtonLink';
 
-const platformIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+const platformIcons: Record<Platform, React.ComponentType<{ className?: string }>> = {
   Windows: Monitor,
   macOS: Apple,
   Linux: Terminal,
 };
 
+const platforms: Platform[] = ['Windows', 'macOS', 'Linux'];
+
+const recommended = downloadArtifacts.find((artifact) => artifact.recommended)!;
+
 export function DownloadPage() {
-  const [activePlatform, setActivePlatform] = useState<string>('Windows');
+  const [activePlatform, setActivePlatform] = useState<Platform>('Windows');
 
   useSeo(
     {
       title: 'Download Cambuz PDF Reader — Free PDF Reader Download',
       description:
-        'Download Cambuz PDF Reader for Windows, Linux, and macOS. Free, no subscription. Installer and portable builds available.',
+        'Download Cambuz PDF Reader 1.1.0 for Windows 10/11 x64 — installer or portable. Linux and macOS builds are available as experimental previews. Free, no subscription.',
       path: '/download/',
     },
     {
@@ -37,19 +49,21 @@ export function DownloadPage() {
       '@type': 'SoftwareApplication',
       name: siteConfig.name,
       applicationCategory: 'UtilitiesApplication',
-      operatingSystem: 'Windows, Linux, macOS',
+      operatingSystem: 'Windows 10, Windows 11, Linux, macOS 13+',
+      softwareVersion: siteConfig.version,
       offers: {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'USD',
       },
-      downloadUrl: `${siteConfig.productionDomain}/download/`,
+      downloadUrl: recommended.url,
+      sameAs: siteConfig.releasePageUrl,
+      license: siteConfig.licenseUrl,
     }
   );
 
-  const platforms = ['Windows', 'Linux', 'macOS'];
   const filteredArtifacts = downloadArtifacts.filter(
-    (a) => a.platform === activePlatform
+    (artifact) => artifact.platform === activePlatform
   );
 
   return (
@@ -61,7 +75,7 @@ export function DownloadPage() {
           <SectionHeading
             eyebrow="Download"
             title="Get Cambuz PDF Reader"
-            description="Free to download. No subscription, no account required. Choose your platform below."
+            description="Free to download. No subscription, no account. The files below are the permanent release assets from the app's GitHub release, not expiring CI builds."
             align="left"
           />
 
@@ -77,41 +91,163 @@ export function DownloadPage() {
             </div>
             <div className="flex items-center gap-2 text-sm text-text-secondary">
               <Check className="w-4 h-4 text-primary" />
-              Version {siteConfig.version}
+              Version {siteConfig.version} pre-release
+            </div>
+            <div className="flex items-center gap-2 text-sm text-text-secondary">
+              <Check className="w-4 h-4 text-primary" />
+              Works offline, no telemetry
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Recommended download */}
+      <section className="pb-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-6 sm:p-8 rounded-2xl bg-surface/70 border border-primary/30 card-glow">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-primary/10 text-primary border border-primary/25">
+                Recommended
+              </span>
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                Primary target · CI-verified
+              </span>
+            </div>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div className="max-w-2xl">
+                <h2 className="text-2xl font-semibold text-text-main">
+                  {recommended.label}
+                </h2>
+                <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+                  {recommended.summary}
+                </p>
+                <p className="mt-3 text-xs text-text-secondary">
+                  {recommended.fileName} · {formatMiB(recommended.bytes)} · Windows
+                  10/11 x64
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row lg:flex-col gap-3 lg:items-stretch">
+                <ButtonLink
+                  to={recommended.url}
+                  external
+                  size="lg"
+                  icon="download"
+                  className="w-full justify-center"
+                >
+                  Download for Windows
+                </ButtonLink>
+                <a
+                  href="#all-downloads"
+                  className="inline-flex items-center justify-center gap-2 text-sm font-medium text-text-secondary hover:text-text-main transition-colors px-2 py-1"
+                >
+                  Other platforms &amp; portable
+                </a>
+              </div>
+            </div>
+            <p className="mt-6 pt-4 border-t border-border-default text-xs text-text-secondary leading-relaxed">
+              Unsigned build: Windows SmartScreen will warn you on first run.
+              That is expected — choose <strong className="text-text-main">More info</strong> →{' '}
+              <strong className="text-text-main">Run anyway</strong> after checking the{' '}
+              <a
+                href="#verify"
+                className="text-accent hover:text-primary transition-colors"
+              >
+                SHA-256 checksum
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Pre-release honesty note */}
+      <section className="py-10">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-6 rounded-xl bg-surface/50 border border-border-default">
+            <div className="flex items-start gap-4">
+              <Info className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-semibold text-text-main mb-2">
+                  What &ldquo;{siteConfig.releaseTag}&rdquo; means
+                </h3>
+                <p className="text-sm text-text-secondary leading-relaxed">
+                  1.1.0 is published as a <strong className="text-text-main">release
+                  candidate</strong>. Automated acceptance tests passed on CI
+                  runners, but a person has not yet run the manual acceptance
+                  pass on real hardware — that pass is what gates a full release.
+                  When it passes, these same files are promoted, so the checksums
+                  you verify below will not change.{' '}
+                  <a
+                    href={siteConfig.releasePageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent hover:text-primary transition-colors inline-flex items-center gap-1"
+                  >
+                    Release page
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                  {' · '}
+                  <a
+                    href={siteConfig.releaseNotesUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent hover:text-primary transition-colors inline-flex items-center gap-1"
+                  >
+                    Release notes
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Platform selector + downloads */}
-      <section className="py-12">
+      <section className="py-8" id="all-downloads">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Platform tabs */}
-          <div className="flex gap-2 p-1.5 rounded-xl bg-surface/50 border border-border-default w-fit mb-10">
-            {platforms.map((platform) => {
-              const Icon = platformIcons[platform] || Monitor;
-              return (
-                <button
-                  key={platform}
-                  onClick={() => setActivePlatform(platform)}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    activePlatform === platform
-                      ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                      : 'text-text-secondary hover:text-text-main hover:bg-surface'
-                  }`}
-                  aria-pressed={activePlatform === platform}
-                >
-                  <Icon className="w-4 h-4" />
-                  {platform}
-                </button>
-              );
-            })}
+          {/* Scrolls rather than overflowing the page on narrow screens */}
+          <div className="mb-10 overflow-x-auto">
+            <div
+              className="flex gap-2 p-1.5 rounded-xl bg-surface/50 border border-border-default w-fit"
+              role="tablist"
+              aria-label="Choose a platform"
+            >
+              {platforms.map((platform) => {
+                const Icon = platformIcons[platform];
+                const isExperimental =
+                  downloadArtifacts.find((a) => a.platform === platform)?.support ===
+                  'experimental';
+                return (
+                  <button
+                    key={platform}
+                    onClick={() => setActivePlatform(platform)}
+                    role="tab"
+                    aria-selected={activePlatform === platform}
+                    className={`flex items-center gap-2 whitespace-nowrap px-3.5 py-2.5 sm:px-5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      activePlatform === platform
+                        ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                        : 'text-text-secondary hover:text-text-main hover:bg-surface'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {platform}
+                    {isExperimental && (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-yellow-400"
+                        title="Experimental build"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Download cards */}
           <div className="grid gap-4">
             {filteredArtifacts.map((artifact) => (
-              <DownloadCard key={artifact.label} artifact={artifact} />
+              <DownloadCard key={artifact.id} artifact={artifact} />
             ))}
           </div>
 
@@ -120,27 +256,120 @@ export function DownloadPage() {
             <InstallationGuide platform={activePlatform} />
             <SecurityNote />
           </div>
+        </div>
+      </section>
 
-          {/* All platforms note */}
-          <div className="mt-12 p-6 rounded-xl bg-surface/50 border border-border-default">
+      {/* Verification */}
+      <section className="py-12" id="verify">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-6 rounded-xl bg-surface/50 border border-border-default">
+            <div className="flex items-center gap-3 mb-4">
+              <FileCheck2 className="w-5 h-5 text-primary" />
+              <h3 className="text-base font-semibold text-text-main">
+                Verify your download
+              </h3>
+            </div>
+            <p className="text-sm text-text-secondary leading-relaxed">
+              Because the builds are unsigned, the checksum is how you confirm a
+              file is the one CI produced. Download the files, then run{' '}
+              <code className="font-mono text-xs text-text-main">
+                Get-FileHash -Algorithm SHA256 &lt;file&gt;
+              </code>{' '}
+              (PowerShell) or{' '}
+              <code className="font-mono text-xs text-text-main">
+                sha256sum -c SHA256SUMS.txt
+              </code>{' '}
+              (Linux/macOS, next to the downloaded files).
+            </p>
+            <p className="mt-3 text-sm text-text-secondary">
+              <a
+                href={siteConfig.checksumsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:text-primary transition-colors inline-flex items-center gap-1.5"
+              >
+                Download {siteConfig.checksumsFileName}
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>{' '}
+              — published on the {siteConfig.releaseTag} release.
+            </p>
+
+            <details className="mt-5 group">
+              <summary className="cursor-pointer text-sm font-medium text-text-main hover:text-primary transition-colors">
+                Show the published SHA-256 for each file
+              </summary>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="py-2 pr-4 text-xs font-semibold text-text-secondary">
+                        File
+                      </th>
+                      <th className="py-2 text-xs font-semibold text-text-secondary">
+                        SHA-256
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {downloadArtifacts.map((artifact) => (
+                      <tr key={artifact.id} className="border-t border-border-default">
+                        <td className="py-2 pr-4 text-xs text-text-secondary align-top">
+                          {artifact.fileName}
+                        </td>
+                        <td className="py-2 text-xs font-mono text-text-secondary/90 break-all">
+                          {artifact.sha256}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      {/* Platform support status */}
+      <section className="pb-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-6 rounded-xl bg-surface/50 border border-border-default">
             <div className="flex items-start gap-4">
               <Info className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
-              <div>
+              <div className="w-full">
                 <h3 className="text-base font-semibold text-text-main mb-2">
                   Platform support status
                 </h3>
                 <p className="text-sm text-text-secondary leading-relaxed">
-                  Windows is the primary launch platform with stable installer
-                  and portable builds. Linux (AppImage) and macOS (Apple Silicon)
-                  builds are available as experimental builds that have not been
-                  fully validated across all distributions and hardware
-                  configurations. Additional platform support will be rolled out
-                  as builds are properly tested.
+                  Windows 10/11 x64 is the primary target: it is built and
+                  exercised by automated packaged-app tests in CI. Linux x86_64
+                  and macOS 13+ (Apple Silicon) builds exist as{' '}
+                  <strong className="text-text-main">experimental previews</strong>{' '}
+                  — they compile and pass headless CI checks, but nobody has
+                  launched them on a real desktop yet.
                 </p>
-                <p className="mt-3 text-sm text-text-secondary">
-                  Download links will point to GitHub Release assets once
-                  published. Until then, artifacts may be available as CI builds
-                  with access or expiration limitations.
+                <ul className="mt-4 space-y-2">
+                  {unsupportedPlatforms.map((item) => (
+                    <li
+                      key={item.platform}
+                      className="flex items-start gap-2 text-sm text-text-secondary"
+                    >
+                      <span
+                        className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary/50 flex-shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        <strong className="text-text-main">{item.platform}</strong>{' '}
+                        — {item.reason}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-4 text-sm text-text-secondary leading-relaxed">
+                  Windows 10 or newer, macOS 13 or newer and a modern x64 Linux
+                  are required: the app ships on the Electron 44 runtime, which
+                  dropped Windows 7/8, 32-bit systems and macOS 12. There are no
+                  automatic updates — come back and download a new build when one
+                  is published.
                 </p>
               </div>
             </div>
@@ -156,110 +385,112 @@ export function DownloadPage() {
   );
 }
 
+function SupportBadge({ support }: { support: DownloadArtifact['support'] }) {
+  if (support === 'primary') {
+    return (
+      <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+        Primary · CI-verified
+      </span>
+    );
+  }
+  return (
+    <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+      Experimental
+    </span>
+  );
+}
+
 function DownloadCard({ artifact }: { artifact: DownloadArtifact }) {
   return (
     <div className="p-6 rounded-xl bg-surface/60 border border-border-default hover:border-border-hover transition-all duration-200 card-glow-hover">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-1">
+          <div className="flex flex-wrap items-center gap-3 mb-2">
             <h3 className="text-lg font-semibold text-text-main">
               {artifact.label}
             </h3>
-            {artifact.experimental && (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-                Experimental
-              </span>
-            )}
-            {!artifact.experimental && (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-                Stable
-              </span>
-            )}
+            <SupportBadge support={artifact.support} />
           </div>
-          <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-text-secondary">
-            <span>Type: {artifact.type}</span>
-            <span>Version: {artifact.version}</span>
+          <p className="text-sm text-text-secondary leading-relaxed">
+            {artifact.summary}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-text-secondary">
+            <span>Version {artifact.version}</span>
             <span>Architecture: {artifact.arch}</span>
-            {artifact.size && <span>Size: {artifact.size}</span>}
+            <span>{formatMiB(artifact.bytes)}</span>
+            <span className="font-mono">{artifact.fileName}</span>
           </div>
         </div>
 
         <div className="flex-shrink-0">
-          {artifact.url ? (
-            <a
-              href={artifact.url}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white font-medium text-sm hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all duration-200"
-            >
-              <Download className="w-4 h-4" />
-              Download
-            </a>
-          ) : (
-            <div className="flex flex-col items-end gap-2">
-              <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-surface-2 border border-border-default text-text-secondary font-medium text-sm cursor-not-allowed">
-                <Download className="w-4 h-4" />
-                Coming soon
-              </span>
-              <span className="text-xs text-text-secondary">
-                Awaiting GitHub Release
-              </span>
-            </div>
-          )}
+          <ButtonLink
+            to={artifact.url}
+            external
+            icon="download"
+            className="w-full sm:w-auto justify-center"
+          >
+            Download {formatMiB(artifact.bytes)}
+          </ButtonLink>
         </div>
       </div>
 
-      {/* Instructions */}
-      <div className="mt-4 pt-4 border-t border-border-default">
-        <p className="text-sm text-text-secondary leading-relaxed">
-          {artifact.instructions}
-        </p>
-      </div>
+      <p className="mt-4 pt-4 border-t border-border-default text-xs text-text-secondary leading-relaxed">
+        {artifact.status}
+      </p>
 
-      {/* Checksum */}
-      {artifact.checksum && (
-        <div className="mt-3 flex items-center gap-2 text-xs text-text-secondary">
-          <ShieldCheck className="w-4 h-4 text-primary" />
-          <span>SHA-256: </span>
-          <code className="font-mono text-text-secondary/80">
-            {artifact.checksum}
-          </code>
-        </div>
-      )}
+      <details className="mt-3">
+        <summary className="cursor-pointer text-xs font-medium text-text-secondary hover:text-text-main transition-colors">
+          How to install
+        </summary>
+        <ol className="mt-3 space-y-3">
+          {artifact.instructions.map((step, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 border border-primary/20 text-[11px] font-semibold text-primary flex-shrink-0 mt-0.5">
+                {i + 1}
+              </span>
+              <span className="text-sm text-text-secondary leading-relaxed">
+                {step}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </details>
     </div>
   );
 }
 
-function InstallationGuide({ platform }: { platform: string }) {
-  const guides: Record<string, { title: string; steps: string[] }> = {
-    Windows: {
-      title: 'Windows installation',
-      steps: [
-        'Download the installer (.exe) or portable build.',
-        'For the installer: double-click and follow the setup wizard.',
-        'For the portable build: run the executable directly — no installation needed.',
-        'Cambuz will be available in your Start menu (installer) or from the downloaded location (portable).',
-      ],
-    },
-    Linux: {
-      title: 'Linux installation',
-      steps: [
-        'Download the AppImage file.',
-        'Make it executable: chmod +x CambuzPDF-*.AppImage',
-        'Run the AppImage by double-clicking or from terminal.',
-        'No installation required. This build is experimental.',
-      ],
-    },
-    macOS: {
-      title: 'macOS installation',
-      steps: [
-        'Download the DMG or ZIP for Apple Silicon Macs.',
-        'For DMG: open it and drag Cambuz to Applications.',
-        'For ZIP: extract and run the application.',
-        'These builds are experimental and for Apple Silicon only.',
-      ],
-    },
-  };
+const installGuides: Record<Platform, { title: string; steps: string[] }> = {
+  Windows: {
+    title: 'Windows in four steps',
+    steps: [
+      'Download the installer (or the portable .exe to skip installing).',
+      'Double-click it, then choose More info → Run anyway at the SmartScreen prompt.',
+      'Follow the setup wizard — the install is per-user, so no admin rights are needed.',
+      'Open a PDF from your file manager, or launch Cambuz and use Open.',
+    ],
+  },
+  macOS: {
+    title: 'macOS in four steps',
+    steps: [
+      'Download the DMG and open it, or unzip the ZIP.',
+      'Drag Cambuz into Applications.',
+      'Right-click the app and choose Open, or allow it in System Settings → Privacy & Security (Gatekeeper blocks unsigned apps by default).',
+      'This build has never been launched by anyone — report what happens in GitHub issues.',
+    ],
+  },
+  Linux: {
+    title: 'Linux in four steps',
+    steps: [
+      'Download the AppImage.',
+      'Make it executable: chmod +x Cambuz-PDF-Reader-1.1.0-linux-x86_64.AppImage',
+      'Run it from your file manager or a terminal.',
+      'No installation and no package manager are involved. The build passed headless CI checks only.',
+    ],
+  },
+};
 
-  const guide = guides[platform] || guides.Windows;
+function InstallationGuide({ platform }: { platform: Platform }) {
+  const guide = installGuides[platform];
 
   return (
     <div className="p-6 rounded-xl bg-surface/50 border border-border-default">
@@ -293,18 +524,28 @@ function SecurityNote() {
         </h3>
       </div>
       <p className="text-sm text-text-secondary leading-relaxed">
-        Cambuz builds are currently unsigned. This means Windows SmartScreen may
-        display a warning when you run the installer. This is expected for
-        software without a code signing certificate.
+        There is no code-signing certificate yet, so Windows SmartScreen will
+        warn you the first time you run Cambuz, and macOS Gatekeeper will refuse
+        the first launch. This is expected for unsigned software, not a sign that
+        something is wrong with your download.
       </p>
       <p className="mt-3 text-sm text-text-secondary leading-relaxed">
-        If you see a SmartScreen warning, click <strong className="text-text-main">More info</strong>{' '}
-        and then <strong className="text-text-main">Run anyway</strong> to
-        proceed. You should only do this for software you trust.
+        Check the SHA-256 against {siteConfig.checksumsFileName} first, then
+        allow the app to run. Never disable Windows security protections or
+        Gatekeeper to install any software.
       </p>
       <p className="mt-3 text-sm text-text-secondary leading-relaxed">
-        Never disable Windows security protections to install any software.
-        Code signing may be added in a future release to resolve this.
+        The source and the build pipeline are public, so both the code and the
+        artifacts are open to inspection:{' '}
+        <a
+          href={siteConfig.githubRepo}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-accent hover:text-primary transition-colors"
+        >
+          {siteConfig.githubRepo.replace('https://', '')}
+        </a>
+        .
       </p>
     </div>
   );

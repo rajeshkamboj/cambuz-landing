@@ -8,7 +8,6 @@ import {
   Check,
 } from 'lucide-react';
 import { useSeo } from '@/hooks/useSeo';
-import { ButtonLink } from '@/components/ButtonLink';
 import { Screenshot } from '@/components/Screenshot';
 import { SectionHeading } from '@/components/SectionHeading';
 import { CTASection } from '@/components/CTASection';

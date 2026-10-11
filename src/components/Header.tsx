@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Download, ChevronDown } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Logo } from './Logo';
 import { ButtonLink } from './ButtonLink';
 
@@ -57,8 +57,7 @@ export function Header() {
                 const isActive =
                   link.to === location.pathname ||
                   (link.to !== '/' && location.pathname.startsWith(link.to) && !link.to.includes('#'));
-                // Avoid duplicate active states
-                const uniqueLink = link.to !== '/about/' || i !== 1;
+                // The nav list contains /about/ twice; render it once.
                 if (link.to === '/about/' && i === 1) return null;
                 return (
                   <Link

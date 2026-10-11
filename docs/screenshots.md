@@ -67,29 +67,34 @@ broken image, and in `npm run dev` logs the path it expected:
 Add the file (see docs/screenshots.md) — showing placeholder instead.
 ```
 
-## Open question: the OCR toolbar button
+## Resolved: the OCR toolbar button
 
-Every screenshot shows an **OCR** button in the application toolbar, but the
-site copy states the opposite in three places:
+The OCR button visible in the screenshots is real. The application ships
+**optional local OCR**: an explicit *Recognize current page* action that uses a
+Tesseract 4+ engine you install yourself — never automatic, never bundled,
+results in a separate box. The site copy said the opposite in three places, so
+it was corrected to match the application README:
 
-- `src/data/faq.ts` — "Does Cambuz include OCR?" → *"No. Cambuz does not include
-  optical character recognition."*
-- `src/pages/LightweightPage.tsx` — lists "No OCR (optical character
-  recognition)" under deliberately excluded features.
-- `src/pages/AlternativesPage.tsx` — lists "OCR for scanned documents" as a
-  reason to choose a different tool.
+- `src/data/faq.ts` — "Does Cambuz include OCR?" now describes the optional
+  local Tesseract flow and that scanned PDFs stay image-only without it.
+- `src/pages/LightweightPage.tsx` — "No bundled OCR engine — optional local
+  Tesseract only".
+- `src/pages/AlternativesPage.tsx` — the "choose a different tool" list no longer
+  claims OCR, page merging/splitting/reordering or form filling are missing;
+  those are implemented and now stated as such.
 
-Either the application has gained OCR support and the copy needs updating, or
-the button is inert and the screenshots advertise a feature that does not work.
-Worth resolving before publishing, since the screenshots are now visible on
-every page.
+The same pass corrected the alternatives list to match the application README's
+"what Cambuz does" section.
 
 ## Not covered here
 
-- `public/og-image.svg` is the social/Open Graph card. Most platforms
-  (WhatsApp, Facebook, LinkedIn, X) **do not render SVG** for `og:image`. Now
-  that `hero-reading-view.webp` exists, export it as a **1200 × 630 PNG** named
-  `public/og-image.png` and update the `og:image` / `twitter:image` references
-  in `index.html`.
-- The logo and favicon are vector assets in `public/` (`logo.svg`,
-  `favicon.svg`) and are not part of the screenshot set.
+- The social card is `public/social/og-image.png` (1200 × 630 PNG), generated
+  from the official icon by `scripts/generate-og-image.py` — see
+  [brand-assets.md](brand-assets.md). It is intentionally an icon + wordmark
+  card rather than a screenshot of the app: at the sizes social platforms
+  actually render, the UI inside `hero-reading-view.webp` is unreadable. Swap in
+  the screenshot only if that changes.
+- The logo and favicon are **not** vector assets. They are PNG/ICO files
+  generated from `assets/icon-master.png` by
+  `scripts/generate-icon-assets.py`; the previous hand-drawn `logo.svg` /
+  `favicon.svg` are gone. See [brand-assets.md](brand-assets.md).

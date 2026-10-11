@@ -8,13 +8,12 @@ import {
   Monitor,
   Check,
   ArrowRight,
-  Zap,
   Shield,
   FolderOpen,
   Sparkles,
 } from 'lucide-react';
 import { useSeo } from '@/hooks/useSeo';
-import { siteConfig } from '@/config/site';
+import { siteConfig, downloadArtifacts, formatMiB } from '@/config/site';
 import { ButtonLink } from '@/components/ButtonLink';
 import { Screenshot } from '@/components/Screenshot';
 import { SectionHeading } from '@/components/SectionHeading';
@@ -38,6 +37,9 @@ const trustItems = [
   { icon: Shield, label: 'No subscription required' },
   { icon: FolderOpen, label: 'Installer & portable option' },
 ];
+
+/** The Windows x64 installer — the same file the release page serves. */
+const recommendedDownload = downloadArtifacts.find((artifact) => artifact.recommended)!;
 
 export function HomePage() {
   useSeo(
@@ -113,7 +115,12 @@ export function HomePage() {
               className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in-up"
               style={{ animationDelay: '0.2s' }}
             >
-              <ButtonLink to="/download/" size="lg" icon="download">
+              <ButtonLink
+                to={recommendedDownload.url}
+                external
+                size="lg"
+                icon="download"
+              >
                 Download for Windows
               </ButtonLink>
               <ButtonLink
@@ -125,6 +132,21 @@ export function HomePage() {
                 Explore Features
               </ButtonLink>
             </div>
+
+            {/* Honest download detail: size, pre-release status, other builds */}
+            <p
+              className="mt-4 text-sm text-text-secondary animate-fade-in-up"
+              style={{ animationDelay: '0.25s' }}
+            >
+              {formatMiB(recommendedDownload.bytes)} installer · v
+              {siteConfig.version} pre-release, unsigned ·{' '}
+              <Link
+                to="/download/"
+                className="text-accent hover:text-primary transition-colors"
+              >
+                portable, Linux and macOS builds
+              </Link>
+            </p>
 
             {/* Trust items */}
             <div

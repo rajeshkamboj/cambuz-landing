@@ -42,7 +42,7 @@ export const faqItems: FAQItem[] = [
   {
     question: 'Does Cambuz include OCR?',
     answer:
-      'No. Cambuz does not include optical character recognition. It reads the text embedded in the PDF file. Scanned documents without a text layer cannot be searched or copied.',
+      'Optional local OCR only. Scanned pages have no text layer, so Cambuz renders them as images. If a Tesseract 4+ executable is on your PATH, you can explicitly run "Recognize current page" — never automatic, with results in a separate box. Cambuz does not bundle, download or auto-run Tesseract, so scanned PDFs stay image-only without it.',
   },
   {
     question: 'Can I print PDFs?',
