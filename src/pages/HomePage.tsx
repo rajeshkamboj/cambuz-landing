@@ -21,6 +21,7 @@ import { SectionHeading } from '@/components/SectionHeading';
 import { FAQAccordion } from '@/components/FAQAccordion';
 import { CTASection } from '@/components/CTASection';
 import { features, comparisonRows } from '@/data/features';
+import { screenshots, featureScreenshot } from '@/data/screenshots';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   BookOpen,
@@ -148,6 +149,7 @@ export function HomePage() {
             style={{ animationDelay: '0.4s' }}
           >
             <Screenshot
+              src={screenshots.heroReadingView}
               alt="Cambuz PDF Reader application window showing a PDF document open in the reading view"
               caption="The Cambuz reading interface"
               frame="app"
@@ -211,6 +213,7 @@ export function HomePage() {
                   {/* Visual */}
                   <div className={reversed ? 'lg:order-1' : ''}>
                     <Screenshot
+                      src={featureScreenshot(feature.id)}
                       alt={feature.screenshotAlt}
                       caption={feature.screenshotCaption}
                       frame="app"

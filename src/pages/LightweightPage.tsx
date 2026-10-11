@@ -3,6 +3,7 @@ import { useSeo } from '@/hooks/useSeo';
 import { siteConfig } from '@/config/site';
 import { ButtonLink } from '@/components/ButtonLink';
 import { Screenshot } from '@/components/Screenshot';
+import { screenshots } from '@/data/screenshots';
 import { SectionHeading } from '@/components/SectionHeading';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { CTASection } from '@/components/CTASection';
@@ -169,6 +170,7 @@ export function LightweightPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Screenshot
+            src={screenshots.pages.lightweight}
             alt="Cambuz PDF Reader lightweight interface showing a clean reading view without clutter"
             caption="The Cambuz reading interface — clean and focused"
             frame="app"

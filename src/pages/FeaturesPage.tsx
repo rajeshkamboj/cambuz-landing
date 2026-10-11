@@ -14,6 +14,7 @@ import { SectionHeading } from '@/components/SectionHeading';
 import { CTASection } from '@/components/CTASection';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { features } from '@/data/features';
+import { featureScreenshot } from '@/data/screenshots';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   BookOpen,
@@ -107,6 +108,7 @@ export function FeaturesPage() {
                   </div>
                   <div className={reversed ? 'lg:order-1' : ''}>
                     <Screenshot
+                      src={featureScreenshot(feature.id)}
                       alt={feature.screenshotAlt}
                       caption={feature.screenshotCaption}
                       frame="app"

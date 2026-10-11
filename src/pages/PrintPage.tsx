@@ -3,6 +3,7 @@ import { useSeo } from '@/hooks/useSeo';
 import { siteConfig } from '@/config/site';
 import { ButtonLink } from '@/components/ButtonLink';
 import { Screenshot } from '@/components/Screenshot';
+import { screenshots } from '@/data/screenshots';
 import { SectionHeading } from '@/components/SectionHeading';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { CTASection } from '@/components/CTASection';
@@ -151,6 +152,7 @@ export function PrintPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Screenshot
+            src={screenshots.pages.print}
             alt="Cambuz PDF Reader print preview dialog showing page range and printer selection options"
             caption="Print preview with page range selection in Cambuz"
             frame="app"

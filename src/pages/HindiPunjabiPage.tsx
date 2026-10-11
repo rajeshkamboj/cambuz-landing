@@ -3,6 +3,7 @@ import { useSeo } from '@/hooks/useSeo';
 import { siteConfig } from '@/config/site';
 import { ButtonLink } from '@/components/ButtonLink';
 import { Screenshot } from '@/components/Screenshot';
+import { screenshots } from '@/data/screenshots';
 import { SectionHeading } from '@/components/SectionHeading';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { CTASection } from '@/components/CTASection';
@@ -203,6 +204,7 @@ export function HindiPunjabiPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Screenshot
+            src={screenshots.pages.hindi}
             alt="Cambuz PDF Reader displaying a Hindi-language PDF document in Devanagari script"
             caption="A Hindi-language PDF rendered in Cambuz"
             frame="app"
