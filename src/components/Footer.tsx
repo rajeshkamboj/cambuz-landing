@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { FileText, Github, ExternalLink } from 'lucide-react';
+import { Github, ExternalLink } from 'lucide-react';
+import { BrandMark } from './Logo';
 import { siteConfig } from '@/config/site';
 
 const footerLinks = [
@@ -44,9 +45,7 @@ export function Footer() {
           {/* Brand column */}
           <div className="md:col-span-1">
             <Link to="/" className="flex items-center gap-2.5 mb-4">
-              <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-surface border border-border-default">
-                <FileText className="w-5 h-5 text-primary" strokeWidth={2} />
-              </span>
+              <BrandMark size={36} />
               <span className="text-lg font-semibold text-text-main">Cambuz</span>
             </Link>
             <p className="text-sm text-text-secondary leading-relaxed mb-4">

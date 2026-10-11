@@ -1,7 +1,5 @@
-import { Check, X, ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Check, X } from 'lucide-react';
 import { useSeo } from '@/hooks/useSeo';
-import { siteConfig } from '@/config/site';
 import { ButtonLink } from '@/components/ButtonLink';
 import { SectionHeading } from '@/components/SectionHeading';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
@@ -172,12 +170,12 @@ export function AlternativesPage() {
           </p>
           <div className="mt-6 space-y-3">
             {[
-              'Editing PDF content, pages, or form fields',
-              'OCR for scanned documents',
+              'Editing PDF text or content',
+              'Annotation, highlighting, or commenting',
               'Converting PDFs to other formats (Word, Excel, etc.)',
               'Digital signatures and certificate-based signing',
-              'PDF annotation, highlighting, or commenting',
-              'Merging, splitting, or rearranging PDF pages',
+              'XFA and JavaScript-driven forms — those open read-only',
+              'Cloud sync, accounts, or collaboration features',
             ].map((item) => (
               <div
                 key={item}
@@ -189,9 +187,11 @@ export function AlternativesPage() {
             ))}
           </div>
           <p className="mt-6 text-text-secondary leading-relaxed">
-            For those tasks, consider a dedicated PDF editor. But if you just
-            need to read, search, and print PDFs, Cambuz does that — for free,
-            without bloat.
+            For those tasks, consider a dedicated PDF editor. What Cambuz does
+            include is page-level work on a copy — rotate, delete, extract,
+            reorder, merge, split and basic metadata — plus filling AcroForm
+            fields and saving a filled copy. If you just need to read, search,
+            and print PDFs, Cambuz does that — for free, without bloat.
           </p>
         </div>
       </section>

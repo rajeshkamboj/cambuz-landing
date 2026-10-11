@@ -151,7 +151,7 @@ export function LightweightPage() {
               'No cloud storage or file upload',
               'No account or sign-in required',
               'No PDF editing or annotation tools',
-              'No OCR (optical character recognition)',
+              'No bundled OCR engine — optional local Tesseract only',
               'No browser plugin or web extension',
               'No advertising or promotional content',
             ].map((item) => (

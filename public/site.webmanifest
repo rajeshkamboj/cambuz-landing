@@ -1,0 +1,31 @@
+{
+  "id": "https://cambuz.pixldot.com/",
+  "name": "Cambuz PDF Reader",
+  "short_name": "Cambuz",
+  "description": "Free desktop PDF reader for Windows. Open, read, search, and print PDFs without subscriptions or bloat.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "background_color": "#0B1020",
+  "theme_color": "#0B1020",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
