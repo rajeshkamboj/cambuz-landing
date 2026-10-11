@@ -202,14 +202,23 @@ export function HindiPunjabiPage() {
       </section>
 
       <section className="py-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Screenshot
-            src={screenshots.pages.hindi}
-            alt="Cambuz PDF Reader displaying a Hindi-language PDF document in Devanagari script"
-            caption="A Hindi-language PDF rendered in Cambuz"
-            frame="app"
-            lazy
-          />
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <Screenshot
+              src={screenshots.pages.hindi}
+              alt="Cambuz PDF Reader displaying a Hindi-language PDF document in Devanagari script"
+              caption="Hindi (Devanagari) sample document in Cambuz"
+              frame="app"
+              lazy
+            />
+            <Screenshot
+              src={screenshots.pages.punjabi}
+              alt="Cambuz PDF Reader displaying a Punjabi-language PDF document in Gurmukhi script"
+              caption="Punjabi (Gurmukhi) sample document in Cambuz"
+              frame="app"
+              lazy
+            />
+          </div>
         </div>
       </section>
 

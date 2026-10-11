@@ -82,8 +82,13 @@ export function Screenshot({
         role="img"
         aria-label={alt}
       >
-        {frame === 'browser' && browserBar}
-        {frame === 'app' && appBar}
+        {/*
+          The decorative window chrome is only drawn for the fallback
+          placeholder. Real screenshots already contain the application window,
+          so drawing it on top would produce a double title bar.
+        */}
+        {!showImage && frame === 'browser' && browserBar}
+        {!showImage && frame === 'app' && appBar}
 
         <div className="relative aspect-[16/10] bg-gradient-to-br from-bg via-surface to-bg flex items-center justify-center">
           {showImage ? (
@@ -91,6 +96,7 @@ export function Screenshot({
               src={src}
               alt={alt}
               loading={lazy ? 'lazy' : 'eager'}
+              decoding="async"
               onError={handleImageError}
               className="w-full h-full object-cover"
               onClick={() => lightbox && setLightboxOpen(true)}

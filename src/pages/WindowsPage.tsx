@@ -137,8 +137,8 @@ export function WindowsPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Screenshot
             src={screenshots.pages.windows}
-            alt="Cambuz PDF Reader running on Windows showing a document in the reading view"
-            caption="Cambuz PDF Reader on Windows"
+            alt="Cambuz PDF Reader running on Windows in the light theme, showing a document in the reading view"
+            caption="Cambuz PDF Reader on Windows, shown in the light theme"
             frame="app"
             lazy
           />

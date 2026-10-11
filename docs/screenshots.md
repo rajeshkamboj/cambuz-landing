@@ -1,70 +1,95 @@
 # Product screenshots
 
-All product screenshots live in **`public/screenshots/`**.
-
-Vite serves everything in `public/` from the site root, so a file at
-`public/screenshots/feature-search.png` is referenced in code as
-`/screenshots/feature-search.png` — and it is copied into `dist/` on build,
-no import required.
+Product screenshots live in **`public/screenshots/`**. Vite serves everything in
+`public/` from the site root, so `public/screenshots/feature-search.webp` is
+referenced in code as `/screenshots/feature-search.webp` and is copied into
+`dist/` on build — no import required.
 
 Paths are declared once in [`src/data/screenshots.ts`](../src/data/screenshots.ts);
-components read from that map. **Drop a file in with the name below and it
-appears — no code change needed.**
+components read from that map.
 
-## Drop-in checklist
+## Current assets
 
-Save each screenshot with exactly this file name in `public/screenshots/`:
+All 10 files are **2048 × 1280 WebP (16:10)** — the exact ratio of the
+`<Screenshot>` frame, so nothing is cropped or letterboxed. Total weight across
+the set is ~420 KB.
 
-| # | File name in `public/screenshots/` | Where it appears | Caption shown |
-| - | ---------------------------------- | ---------------- | ------------- |
-| 1 | `hero-reading-view.png` | Home page hero (`/`) | The Cambuz reading interface |
-| 2 | `feature-reading.png` | Home + Features — "Just you and the document." | The main reading interface with page navigation and zoom controls |
-| 3 | `feature-search.png` | Home + Features — "Search less. Find more." | Search results highlighted with navigation between matches |
-| 4 | `feature-selection.png` | Home + Features — "Select. Copy. Keep moving." | Text selection in a PDF document ready to copy |
-| 5 | `feature-print.png` | Home + Features — "From PDF to paper." | Print preview with page range selection |
-| 6 | `feature-languages.png` | Home + Features — "Made for the documents you actually read." | A Hindi-language PDF rendered in Cambuz |
-| 7 | `feature-desktop.png` | Home + Features — "A desktop tool, not another upload form." | Cambuz running as a native desktop application |
-| 8 | `page-windows-reading-view.png` | `/free-pdf-reader-windows/` | Cambuz PDF Reader on Windows |
-| 9 | `page-lightweight-reading-view.png` | `/lightweight-pdf-reader/` | The Cambuz reading interface — clean and focused |
-| 10 | `page-offline-local-file.png` | `/offline-pdf-reader/` | Cambuz reading a local PDF file without an internet connection |
-| 11 | `page-print-preview.png` | `/print-pdf-windows/` | Print preview with page range selection in Cambuz |
-| 12 | `page-hindi-devanagari.png` | `/read-hindi-punjabi-pdf/` | A Hindi-language PDF rendered in Cambuz |
+| File | What it shows | Used by |
+| ---- | ------------- | ------- |
+| `hero-reading-view.webp` | Document open on page 1, thumbnail sidebar visible | Home hero, `/offline-pdf-reader/` |
+| `feature-reading.webp` | Document open on page 2, thumbnail 2 selected | Home + Features — reading |
+| `feature-search.webp` | Search for "page" — 25 matches, highlights on every hit | Home + Features — search |
+| `feature-text-selection.webp` | Same document with a text run selected (blue highlight) | Home + Features — selection |
+| `feature-print-preview.webp` | Print preview dialog — page range `1-2`, printer, paper size, scaling | Home + Features — print, `/print-pdf-windows/` |
+| `feature-hindi.webp` | `hindi-sample.pdf` — Devanagari script rendered | Home + Features — languages, `/read-hindi-punjabi-pdf/` |
+| `feature-punjabi.webp` | `punjabi-sample.pdf` — Gurmukhi script rendered | `/read-hindi-punjabi-pdf/` |
+| `welcome-screen.webp` | Empty state — "Open a PDF to get started", sample-file buttons | Home + Features — desktop |
+| `theme-light.webp` | Reading view in the light theme | `/free-pdf-reader-windows/` |
+| `lightweight-clean-view.webp` | Document with the sidebar collapsed, no chrome beyond the toolbar | `/lightweight-pdf-reader/` |
 
-That's **12 files**. Slots 2–7 are reused on both the home page and
-`/features/`, so one file each covers both.
+`feature-print-preview.webp`, `feature-hindi.webp` and
+`hero-reading-view.webp` are each reused by two slots — that is intentional,
+not a missing asset.
 
-## Image specs
+## Not yet available
 
-| Property | Recommendation |
-| -------- | -------------- |
-| Aspect ratio | **16:10** (the frame is fixed at `aspect-[16/10]` and images are `object-cover`) |
-| Size | **1600 × 1000 px** (3200 × 2000 for retina is fine, but doubles page weight) |
-| Format | **PNG** for UI screenshots — crisp text, flat colours compress well |
-| Weight | Aim for **≤ 300 KB per file** (compress with `pngquant` / Squoosh if larger) |
-| Content | Crop to the app window itself. The `frame="app"` chrome (title bar, borders, shadow) is drawn by the component — don't bake it into the image. |
+There is no dedicated screenshot for these, so they reuse the closest match:
 
-Using a different extension or file name? Change the path in
-`src/data/screenshots.ts` for that slot — that's the only place it is written.
+- **Offline reading** — reuses `hero-reading-view.webp`. A shot of the reader
+  with no network activity would be indistinguishable to a visitor, but a
+  purpose-made one showing a local file path would be better.
+- **Punjabi on the home page** — the languages feature card uses the Hindi
+  shot. Both scripts share one slot, so only one can appear there.
+
+## Adding or replacing a screenshot
+
+1. Drop the file into `public/screenshots/`.
+2. Point the relevant entry in `src/data/screenshots.ts` at it.
+
+That is the whole process. Requirements:
+
+| Property | Value |
+| -------- | ----- |
+| Aspect ratio | **16:10** required — the frame is fixed at `aspect-[16/10]` and images render `object-cover`, so any other ratio is cropped |
+| Size | 2048 × 1280 (current baseline). 1024 × 640 is fine for a smaller payload |
+| Format | WebP (current). PNG also works for UI shots |
+| Weight | Keep under ~300 KB per file |
+| Content | The real application window — do **not** crop the title bar out. `<Screenshot>` detects a real image and suppresses its decorative window chrome, which is only drawn for the fallback placeholder. |
 
 ## How the fallback works
 
-Until a file exists, `<Screenshot>` renders an abstract placeholder at the
-correct size so the layout stays intact. In `npm run dev` it also prints the
-expected path to the browser console and under the placeholder:
+If an entry in `src/data/screenshots.ts` points at a file that is missing or
+typo'd, `<Screenshot>` swaps in a correctly-sized placeholder instead of a
+broken image, and in `npm run dev` logs the path it expected:
 
 ```
-[Screenshot] No image at public/screenshots/feature-search.png.
+[Screenshot] No image at public/screenshots/feature-search.webp.
 Add the file (see docs/screenshots.md) — showing placeholder instead.
 ```
 
-Placeholders are visible in production too (a missing file is never a broken
-image icon). The console warning and path hint only appear in dev.
+## Open question: the OCR toolbar button
+
+Every screenshot shows an **OCR** button in the application toolbar, but the
+site copy states the opposite in three places:
+
+- `src/data/faq.ts` — "Does Cambuz include OCR?" → *"No. Cambuz does not include
+  optical character recognition."*
+- `src/pages/LightweightPage.tsx` — lists "No OCR (optical character
+  recognition)" under deliberately excluded features.
+- `src/pages/AlternativesPage.tsx` — lists "OCR for scanned documents" as a
+  reason to choose a different tool.
+
+Either the application has gained OCR support and the copy needs updating, or
+the button is inert and the screenshots advertise a feature that does not work.
+Worth resolving before publishing, since the screenshots are now visible on
+every page.
 
 ## Not covered here
 
 - `public/og-image.svg` is the social/Open Graph card. Most platforms
-  (WhatsApp, Facebook, LinkedIn, X) **do not render SVG** for `og:image` — when
-  you have a hero shot, export a **1200 × 630 PNG** as `public/og-image.png` and
-  update the `og:image` / `twitter:image` references in `index.html`.
+  (WhatsApp, Facebook, LinkedIn, X) **do not render SVG** for `og:image`. Now
+  that `hero-reading-view.webp` exists, export it as a **1200 × 630 PNG** named
+  `public/og-image.png` and update the `og:image` / `twitter:image` references
+  in `index.html`.
 - The logo and favicon are vector assets in `public/` (`logo.svg`,
   `favicon.svg`) and are not part of the screenshot set.
