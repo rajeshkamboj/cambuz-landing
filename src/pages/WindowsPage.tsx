@@ -8,6 +8,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { CTASection } from '@/components/CTASection';
 import { FAQAccordion } from '@/components/FAQAccordion';
 import { faqItems } from '@/data/faq';
+import { screenshots } from '@/data/screenshots';
 
 const windowsFaq = faqItems.filter((_, i) => [0, 1, 2, 3, 4, 5, 10].includes(i));
 
@@ -135,8 +136,9 @@ export function WindowsPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Screenshot
-            alt="Cambuz PDF Reader running on Windows showing a document in the reading view"
-            caption="Cambuz PDF Reader on Windows"
+            src={screenshots.pages.windows}
+            alt="Cambuz PDF Reader running on Windows in the light theme, showing a document in the reading view"
+            caption="Cambuz PDF Reader on Windows, shown in the light theme"
             frame="app"
             lazy
           />

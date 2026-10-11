@@ -3,6 +3,7 @@ import { useSeo } from '@/hooks/useSeo';
 import { siteConfig } from '@/config/site';
 import { ButtonLink } from '@/components/ButtonLink';
 import { Screenshot } from '@/components/Screenshot';
+import { screenshots } from '@/data/screenshots';
 import { SectionHeading } from '@/components/SectionHeading';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { CTASection } from '@/components/CTASection';
@@ -157,6 +158,7 @@ export function OfflinePage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Screenshot
+            src={screenshots.pages.offline}
             alt="Cambuz PDF Reader displaying a PDF document offline on a Windows desktop"
             caption="Cambuz reading a local PDF file without an internet connection"
             frame="app"

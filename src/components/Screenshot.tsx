@@ -13,14 +13,14 @@ interface ScreenshotProps {
 /**
  * Reusable screenshot component for displaying Cambuz product visuals.
  *
- * Until genuine screenshots are supplied, this component renders a
- * clearly-marked placeholder with the correct dimensions and framing.
- * To replace: add image files to /public/screenshots/ and pass the
- * path via the `src` prop. The component handles the rest.
+ * Image files live in `/public/screenshots/` and are referenced through the
+ * map in `src/data/screenshots.ts`. The drop-in file list (names, sizes,
+ * which slot uses each one) is in `docs/screenshots.md`.
  *
- * NOTE: Placeholder labels are only shown during development and are
- * not rendered in production. Set src to a real image path to display
- * actual screenshots.
+ * If `src` is omitted, or the file has not been added yet, this component
+ * renders a clearly-marked placeholder with the correct dimensions and
+ * framing — it never shows a broken image. In development it also logs the
+ * expected file path so it is obvious what to drop in.
  */
 export function Screenshot({
   src,
@@ -32,11 +32,23 @@ export function Screenshot({
   lazy = true,
 }: ScreenshotProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [imageSrc, setImageSrc] = useState(src);
+  const [failed, setFailed] = useState(false);
 
+  // Reset the failure state when a different src is supplied (e.g. HMR).
   useEffect(() => {
-    setImageSrc(src);
+    setFailed(false);
   }, [src]);
+
+  const showImage = Boolean(src) && !failed;
+
+  function handleImageError() {
+    setFailed(true);
+    if (import.meta.env.DEV) {
+      console.warn(
+        `[Screenshot] No image at public${src}. Add the file (see docs/screenshots.md) — showing placeholder instead.`
+      );
+    }
+  }
 
   const frameClasses = {
     app: 'rounded-xl border border-border-default bg-surface overflow-hidden shadow-2xl',
@@ -70,15 +82,22 @@ export function Screenshot({
         role="img"
         aria-label={alt}
       >
-        {frame === 'browser' && browserBar}
-        {frame === 'app' && appBar}
+        {/*
+          The decorative window chrome is only drawn for the fallback
+          placeholder. Real screenshots already contain the application window,
+          so drawing it on top would produce a double title bar.
+        */}
+        {!showImage && frame === 'browser' && browserBar}
+        {!showImage && frame === 'app' && appBar}
 
         <div className="relative aspect-[16/10] bg-gradient-to-br from-bg via-surface to-bg flex items-center justify-center">
-          {imageSrc ? (
+          {showImage ? (
             <img
-              src={imageSrc}
+              src={src}
               alt={alt}
               loading={lazy ? 'lazy' : 'eager'}
+              decoding="async"
+              onError={handleImageError}
               className="w-full h-full object-cover"
               onClick={() => lightbox && setLightboxOpen(true)}
               role={lightbox ? 'button' : undefined}
@@ -90,7 +109,7 @@ export function Screenshot({
               }
             />
           ) : (
-            <PlaceholderVisual alt={alt} />
+            <PlaceholderVisual alt={alt} expectedSrc={src} />
           )}
         </div>
 
@@ -101,7 +120,7 @@ export function Screenshot({
         )}
       </figure>
 
-      {lightbox && lightboxOpen && imageSrc && (
+      {lightbox && lightboxOpen && showImage && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-8 cursor-pointer"
           onClick={() => setLightboxOpen(false)}
@@ -110,7 +129,7 @@ export function Screenshot({
           aria-label={`${alt} — enlarged view`}
         >
           <img
-            src={imageSrc}
+            src={src}
             alt={alt}
             className="max-w-full max-h-full rounded-lg shadow-2xl"
           />
@@ -129,12 +148,18 @@ export function Screenshot({
 
 /**
  * Development placeholder for screenshots.
- * Renders an abstract PDF-reader-like composition.
- * In production with real `src` images, this is never shown.
+ * Renders an abstract PDF-reader-like composition plus, in dev only, the
+ * file path that should be dropped into /public/screenshots/.
  */
-function PlaceholderVisual({ alt }: { alt: string }) {
+function PlaceholderVisual({
+  alt,
+  expectedSrc,
+}: {
+  alt: string;
+  expectedSrc?: string;
+}) {
   return (
-    <div className="w-full h-full flex items-center justify-center p-6">
+    <div className="w-full h-full flex flex-col items-center justify-center gap-5 p-6">
       <div className="relative w-full max-w-md">
         {/* Ambient glow */}
         <div
@@ -164,6 +189,14 @@ function PlaceholderVisual({ alt }: { alt: string }) {
           </div>
         </div>
       </div>
+
+      {import.meta.env.DEV && (
+        <p className="max-w-md text-center text-[11px] leading-relaxed font-mono text-text-secondary/60 break-all">
+          {expectedSrc
+            ? `Awaiting public${expectedSrc} — ${alt}`
+            : `No src set — ${alt}`}
+        </p>
+      )}
     </div>
   );
 }
