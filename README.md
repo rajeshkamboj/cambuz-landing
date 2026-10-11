@@ -12,43 +12,66 @@ npm run typecheck
 npm run lint
 ```
 
-## Download links
+## Automatic Cambuz release sync
 
-Every download URL on the site is derived from a single release tag in
-[`src/config/site.ts`](src/config/site.ts):
+Every merge to `cambuz-pdf` `main` triggers a versioned pre-release build. When
+all five advertised installers succeed, its release workflow publishes them with
+`SHA256SUMS.txt`, updates the app README with their permanent direct URLs, and
+sends this repository a `cambuz-release-published` event. This repository then
+verifies the named release with the GitHub API and commits two generated files:
 
-```ts
-const RELEASE_TAG = 'v1.1.0-rc1';
-const RELEASE_BASE = `https://github.com/rajeshkamboj/cambuz-pdf/releases/download/${RELEASE_TAG}`;
-```
+- [`src/config/release.generated.ts`](src/config/release.generated.ts) — the exact
+  tag, asset URL, byte count and GitHub-provided SHA-256 digest for every
+  advertised download;
+- [`src/data/features.generated.ts`](src/data/features.generated.ts) — reviewed
+  product copy from `cambuz-pdf/docs/landing-content.json`.
 
-To move the site to a newer build:
+All React pages derive download URLs and checksums from that generated release
+record. The page never uses `/releases/latest`: automatic builds are
+pre-releases, and every link stays pinned to the precise public asset that was
+verified. The workflow also runs hourly as a repair path if the immediate event
+is missed.
+
+### One-time GitHub setup
+
+The event needs a fine-grained GitHub PAT because `GITHUB_TOKEN` cannot dispatch
+a workflow in another repository. Create a token that is restricted to the
+`rajeshkamboj/cambuz-landing` repository with **Contents: read and write**
+permission. Save it in the **cambuz-pdf** repository as the Actions secret
+`CAMBUZ_LANDING_DISPATCH_TOKEN`. Do not put a token in either repository or in a
+workflow file.
+
+The landing workflow itself uses its repository-scoped `GITHUB_TOKEN` only to
+commit its two generated files to `main`. Its `permissions: contents: write`
+setting must remain enabled. If branch protection later blocks bot commits,
+allow `cambuz-release-sync[bot]` to push, or change that final workflow step to
+open a PR instead.
+
+### Local recovery / verification
+
+To reproduce a specific sync locally (after the upstream feature manifest is
+present), run:
 
 ```bash
-node scripts/update-release.mjs v1.1.0        # rewrite the tag + version
-node scripts/update-release.mjs --check       # verify the release assets exist
+node scripts/update-release.mjs v1.1.0-build.42 <app-commit-sha>
+npm run typecheck && npm run lint && npm run build
 ```
 
-`--check` asks the GitHub API for the release and prints every asset with its
-size, name and whether the site's artifact list matches. It exits non-zero on a
-mismatch, so it is safe to run in CI or by hand after publishing a release.
+`node scripts/update-release.mjs --discover` selects the newest published
+automatic build without calling GitHub's `/releases/latest` endpoint. The sync
+refuses a release that lacks any expected installer, `SHA256SUMS.txt`, an
+API-supplied SHA-256 digest, or a valid feature manifest. It never guesses file
+sizes or checksums.
 
-Two rules that matter:
+### Feature-copy contract
 
-- **The tag is pinned on purpose.** GitHub excludes pre-releases from
-  `/releases/latest`, so a "latest" link would not reach `v1.1.0-rc1`. When
-  1.1.0 is promoted to a full release, point the tag at it — the file names stay
-  the same.
-- **File sizes and SHA-256 values are facts, not estimates.** They come from the
-  published release (asset sizes from the Releases API, checksums from
-  `SHA256SUMS.txt`). Re-check them whenever the tag changes.
-
-The page copy is deliberately explicit that 1.1.0 is a release candidate: the
-automated acceptance pass is green on CI, the manual pass on real hardware has
-not happened yet, the builds are unsigned, and Linux/macOS are experimental
-previews. Please keep it that way — the app's own
-[README](https://github.com/rajeshkamboj/cambuz-pdf#readme) is the source of
-truth for what the build does and does not do.
+No automated process can truthfully infer marketing claims from arbitrary source
+code. `cambuz-pdf/docs/landing-content.json` is therefore the reviewed,
+machine-readable source of truth for feature text. A feature PR should update
+that manifest alongside its README and tests; after the merge, the released app
+build, app README and landing Features page stay aligned automatically. A new
+feature may reuse an existing `screenshotId` or omit it; the site deliberately
+shows a placeholder until a genuine screenshot is added.
 
 ## Brand assets
 

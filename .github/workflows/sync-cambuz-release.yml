@@ -1,0 +1,88 @@
+name: Sync published Cambuz build
+
+on:
+  # Sent by the cambuz-pdf release job immediately after its GitHub Release is
+  # public. The payload is treated as a hint only: the script re-reads and
+  # validates the named release and the manifest from GitHub before writing.
+  repository_dispatch:
+    types: [cambuz-release-published]
+  # Dispatch is intentionally fast, while this hourly check repairs a missed
+  # event (for example while a repository secret was being rotated). It never
+  # uses GitHub's /releases/latest endpoint because builds are pre-releases.
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published Cambuz release tag to sync (leave blank to discover the newest automatic build)'
+        required: false
+        type: string
+      source_ref:
+        description: 'App commit/ref containing docs/landing-content.json'
+        required: false
+        default: 'main'
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-cambuz-release
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Verify and publish release metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Sync the exact published release
+        env:
+          # The dispatch payload is not trusted as release data. It merely
+          # selects what the sync script asks the GitHub API to verify.
+          EVENT_TAG: ${{ github.event.client_payload.tag }}
+          EVENT_REF: ${{ github.event.client_payload.source_sha }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_REF: ${{ inputs.source_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-${EVENT_TAG:-}}"
+          ref="${INPUT_REF:-${EVENT_REF:-main}}"
+          if [ -n "$tag" ]; then
+            node scripts/sync-cambuz-release.mjs --tag "$tag" --ref "$ref"
+          else
+            node scripts/sync-cambuz-release.mjs --discover
+          fi
+
+      - name: Validate generated site
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run build
+
+      - name: Commit generated metadata when it changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/config/release.generated.ts src/data/features.generated.ts; then
+            echo 'Release metadata is already current.'
+            exit 0
+          fi
+          git config user.name 'cambuz-release-sync[bot]'
+          git config user.email 'cambuz-release-sync[bot]@users.noreply.github.com'
+          git add src/config/release.generated.ts src/data/features.generated.ts
+          git commit -m "chore(downloads): sync Cambuz ${{ github.event.client_payload.tag || inputs.tag || 'build' }}"
+          git push origin HEAD:main

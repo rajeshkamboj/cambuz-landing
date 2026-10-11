@@ -107,7 +107,7 @@ export function FeaturesPage() {
                   </div>
                   <div className={reversed ? 'lg:order-1' : ''}>
                     <Screenshot
-                      src={featureScreenshot(feature.id)}
+                      src={featureScreenshot(feature.screenshotId ?? feature.id)}
                       alt={feature.screenshotAlt}
                       caption={feature.screenshotCaption}
                       frame="app"
