@@ -40,8 +40,7 @@ export function DownloadPage() {
   useSeo(
     {
       title: 'Download Cambuz PDF Reader — Free PDF Reader Download',
-      description:
-        'Download Cambuz PDF Reader 1.1.0 for Windows 10/11 x64 — installer or portable. Linux and macOS builds are available as experimental previews. Free, no subscription.',
+      description: `Download Cambuz PDF Reader ${siteConfig.version} for Windows 10/11 x64 — installer or portable. Linux and macOS builds are available as experimental previews. Free, no subscription.`,
       path: '/download/',
     },
     {
@@ -171,12 +170,23 @@ export function DownloadPage() {
                   What &ldquo;{siteConfig.releaseTag}&rdquo; means
                 </h3>
                 <p className="text-sm text-text-secondary leading-relaxed">
-                  1.1.0 is published as a <strong className="text-text-main">release
-                  candidate</strong>. Automated acceptance tests passed on CI
-                  runners, but a person has not yet run the manual acceptance
-                  pass on real hardware — that pass is what gates a full release.
-                  When it passes, these same files are promoted, so the checksums
-                  you verify below will not change.{' '}
+                  {siteConfig.automaticBuild ? (
+                    <>
+                      This is an <strong className="text-text-main">automatic pre-release build</strong>{' '}
+                      published after a successful merge to the app&apos;s main branch. It is
+                      pinned to this exact release and checksum; download it for evaluation
+                      and report problems before relying on it in production.{' '}
+                    </>
+                  ) : (
+                    <>
+                      {siteConfig.version} is published as a{' '}
+                      <strong className="text-text-main">release candidate</strong>. Automated
+                      acceptance tests passed on CI runners, but a person has not yet run the
+                      manual acceptance pass on real hardware — that pass is what gates a full
+                      release. When it passes, these same files are promoted, so the checksums
+                      you verify below will not change.{' '}
+                    </>
+                  )}
                   <a
                     href={siteConfig.releasePageUrl}
                     target="_blank"
@@ -482,7 +492,7 @@ const installGuides: Record<Platform, { title: string; steps: string[] }> = {
     title: 'Linux in four steps',
     steps: [
       'Download the AppImage.',
-      'Make it executable: chmod +x Cambuz-PDF-Reader-1.1.0-linux-x86_64.AppImage',
+      `Make it executable: chmod +x ${downloadArtifacts.find((artifact) => artifact.id === 'linux-x86_64-appimage')!.fileName}`,
       'Run it from your file manager or a terminal.',
       'No installation and no package manager are involved. The build passed headless CI checks only.',
     ],
