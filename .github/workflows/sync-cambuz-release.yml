@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Published Cambuz release tag to sync (leave blank to discover the newest automatic build)'
+        description: 'Published Cambuz release tag to sync (leave blank to discover the newest complete release)'
         required: false
         type: string
       source_ref:
@@ -22,6 +22,16 @@ on:
         required: false
         default: 'main'
         type: string
+      history:
+        description: 'How many previous versions the download page lists'
+        required: false
+        default: '12'
+        type: string
+      force:
+        description: 'Allow a named tag to replace the published release with an older one'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -49,7 +59,14 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
+      # The decision logic that picks, validates and publishes a release is
+      # covered by fixture-based tests, so a regression fails here before any
+      # generated file is touched.
+      - name: Test the release sync logic
+        run: npm test
+
       - name: Sync the exact published release
+        id: sync
         env:
           # The dispatch payload is not trusted as release data. It merely
           # selects what the sync script asks the GitHub API to verify.
@@ -57,24 +74,56 @@ jobs:
           EVENT_REF: ${{ github.event.client_payload.source_sha }}
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_REF: ${{ inputs.source_ref }}
+          INPUT_HISTORY: ${{ inputs.history }}
+          INPUT_FORCE: ${{ inputs.force }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="${INPUT_TAG:-${EVENT_TAG:-}}"
           ref="${INPUT_REF:-${EVENT_REF:-main}}"
+          history="${INPUT_HISTORY:-12}"
+          extra=()
+          if [ "${INPUT_FORCE:-false}" = "true" ]; then
+            extra+=(--force)
+          fi
           if [ -n "$tag" ]; then
-            node scripts/sync-cambuz-release.mjs --tag "$tag" --ref "$ref"
+            node scripts/sync-cambuz-release.mjs --tag "$tag" --ref "$ref" --history "$history" "${extra[@]}"
           else
-            node scripts/sync-cambuz-release.mjs --discover
+            node scripts/sync-cambuz-release.mjs --discover --history "$history" "${extra[@]}"
           fi
 
+      # Type-checks, lints and builds the site, then proves the built bundle
+      # still contains every download link and checksum from the generated
+      # release record — the home page and download page cannot drift from the
+      # published release without failing this step.
       - name: Validate generated site
         run: |
           npm run typecheck
           npm run lint
           npm run build
+          npm run verify:downloads
+
+      - name: Summarise the sync
+        env:
+          SYNC_TAG: ${{ steps.sync.outputs.tag }}
+          SYNC_VERSION: ${{ steps.sync.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.sync.outputs.previous_tag }}
+          HISTORY_COUNT: ${{ steps.sync.outputs.history_count }}
+        run: |
+          {
+            echo "### Cambuz release sync"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Published build | \`${SYNC_TAG}\` (${SYNC_VERSION}) |"
+            echo "| Previously advertised | \`${PREVIOUS_TAG:-none}\` |"
+            echo "| Previous versions listed | ${HISTORY_COUNT} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit generated metadata when it changed
+        env:
+          SYNC_TAG: ${{ steps.sync.outputs.tag }}
+          HISTORY_COUNT: ${{ steps.sync.outputs.history_count }}
         run: |
           set -euo pipefail
           if git diff --quiet -- src/config/release.generated.ts src/data/features.generated.ts; then
@@ -84,5 +133,17 @@ jobs:
           git config user.name 'cambuz-release-sync[bot]'
           git config user.email 'cambuz-release-sync[bot]@users.noreply.github.com'
           git add src/config/release.generated.ts src/data/features.generated.ts
-          git commit -m "chore(downloads): sync Cambuz ${{ github.event.client_payload.tag || inputs.tag || 'build' }}"
-          git push origin HEAD:main
+          git commit \
+            -m "chore(downloads): sync Cambuz ${SYNC_TAG}" \
+            -m "The home page and download page now serve ${SYNC_TAG}; ${HISTORY_COUNT} previous version(s) are offered under /download/#previous-versions."
+          # Another push can land while this job runs. Rebase onto it and retry
+          # rather than losing the generated metadata.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "::warning::push attempt ${attempt} failed; rebasing on main and retrying"
+            git pull --rebase origin main
+          done
+          echo "::error::could not push the generated release metadata after 3 attempts"
+          exit 1

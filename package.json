@@ -8,7 +8,10 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "test": "node --test \"scripts/**/*.test.mjs\"",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "verify:downloads": "node scripts/check-built-downloads.mjs",
+    "release:sync": "node scripts/update-release.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

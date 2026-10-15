@@ -51,3 +51,20 @@ The token is only used to call GitHub's `repository_dispatch` endpoint; it is no
 stored in this repository or in the patch. Without it, the landing workflow's
 hourly repair sync will still discover the newest automatic release after both
 PRs are merged, but the normal update will not be immediate.
+
+## Previous versions need no upstream change
+
+The download page's previous-version list (`/download/#previous-versions`) is
+built entirely from the releases the app repository has already published: the
+landing sync reads the release list, validates every release's asset set and
+writes the newest one plus the older ones into
+[`src/config/release.generated.ts`](../src/config/release.generated.ts).
+
+That has two consequences for the app repository:
+
+- nothing extra has to be added to the app's release workflow — the existing
+  `repository_dispatch` payload (`tag` and `source_sha`) keeps working, and the
+  hourly repair sync alone is enough to keep the history current;
+- a release that is deleted or made private upstream simply stops being
+  advertised here on the next sync, because the list is rebuilt rather than
+  appended to.

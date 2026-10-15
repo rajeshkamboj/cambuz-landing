@@ -16,6 +16,7 @@ import {
   downloadArtifacts,
   unsupportedPlatforms,
   formatMiB,
+  formatReleaseDate,
   type DownloadArtifact,
   type Platform,
 } from '@/config/site';
@@ -23,6 +24,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SectionHeading } from '@/components/SectionHeading';
 import { CTASection } from '@/components/CTASection';
 import { ButtonLink } from '@/components/ButtonLink';
+import { PreviousVersions } from '@/components/PreviousVersions';
 
 const platformIcons: Record<Platform, React.ComponentType<{ className?: string }>> = {
   Windows: Monitor,
@@ -40,7 +42,7 @@ export function DownloadPage() {
   useSeo(
     {
       title: 'Download Cambuz PDF Reader — Free PDF Reader Download',
-      description: `Download Cambuz PDF Reader ${siteConfig.version} for Windows 10/11 x64 — installer or portable. Linux and macOS builds are available as experimental previews. Free, no subscription.`,
+      description: `Download Cambuz PDF Reader ${siteConfig.version} for Windows 10/11 x64 — installer or portable. Linux and macOS builds are available as experimental previews, and every previous version stays available. Free, no subscription.`,
       path: '/download/',
     },
     {
@@ -91,6 +93,10 @@ export function DownloadPage() {
             <div className="flex items-center gap-2 text-sm text-text-secondary">
               <Check className="w-4 h-4 text-primary" />
               Version {siteConfig.version} pre-release
+            </div>
+            <div className="flex items-center gap-2 text-sm text-text-secondary">
+              <Check className="w-4 h-4 text-primary" />
+              Published {formatReleaseDate(siteConfig.releasePublishedAt)}
             </div>
             <div className="flex items-center gap-2 text-sm text-text-secondary">
               <Check className="w-4 h-4 text-primary" />
@@ -206,6 +212,13 @@ export function DownloadPage() {
                     Release notes
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
+                  {' · '}
+                  <a
+                    href="#previous-versions"
+                    className="text-accent hover:text-primary transition-colors"
+                  >
+                    Previous versions
+                  </a>
                 </p>
               </div>
             </div>
@@ -301,7 +314,9 @@ export function DownloadPage() {
                 Download {siteConfig.checksumsFileName}
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>{' '}
-              — published on the {siteConfig.releaseTag} release.
+              — published on the {siteConfig.releaseTag} release. Every previous
+              version listed below publishes its own {siteConfig.checksumsFileName},
+              and the SHA-256 values it contains are the ones shown here.
             </p>
 
             <details className="mt-5 group">
@@ -379,13 +394,17 @@ export function DownloadPage() {
                   are required: the app ships on the Electron 44 runtime, which
                   dropped Windows 7/8, 32-bit systems and macOS 12. There are no
                   automatic updates — come back and download a new build when one
-                  is published.
+                  is published, or install a previous version if the newest build
+                  does not work for you.
                 </p>
               </div>
             </div>
           </div>
         </div>
       </section>
+
+      {/* Previous published builds, generated from the app's release list */}
+      <PreviousVersions />
 
       <CTASection
         title="Not sure if Cambuz is right for you?"

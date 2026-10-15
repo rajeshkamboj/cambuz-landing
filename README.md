@@ -8,6 +8,7 @@ Marketing site for Cambuz PDF Reader.
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # outputs to dist/
+npm test           # release-sync decision logic
 npm run typecheck
 npm run lint
 ```
@@ -22,15 +23,55 @@ verifies the named release with the GitHub API and commits two generated files:
 
 - [`src/config/release.generated.ts`](src/config/release.generated.ts) — the exact
   tag, asset URL, byte count and GitHub-provided SHA-256 digest for every
-  advertised download;
+  advertised download, for the newest published build (`release`) **and** for
+  the older ones (`releaseHistory`);
 - [`src/data/features.generated.ts`](src/data/features.generated.ts) — reviewed
   product copy from `cambuz-pdf/docs/landing-content.json`.
 
 All React pages derive download URLs and checksums from that generated release
-record. The page never uses `/releases/latest`: automatic builds are
-pre-releases, and every link stays pinned to the precise public asset that was
-verified. The workflow also runs hourly as a repair path if the immediate event
-is missed.
+record, so the home page, the download page and the previous-version list cannot
+drift from the published release. The page never uses `/releases/latest`:
+automatic builds are pre-releases, and every link stays pinned to the precise
+public asset that was verified. The workflow also runs hourly as a repair path
+if the immediate event is missed.
+
+### Previous versions on /download
+
+`/download/#previous-versions` lists the older published builds, newest first,
+each with its own five installers, published checksums, release page and source
+commit. The list is generated from the same verified API data as the newest
+build, which means:
+
+- a build appears as soon as it is published and moves down the list as newer
+  builds arrive;
+- deleting a release upstream removes it from the list on the next sync;
+- the list is capped at the 12 most recent older builds by default — pass
+  `--history <n>` (0–50) to `sync-cambuz-release.mjs`, or use the **history**
+  input of the manual workflow run, to change that;
+- older builds are labelled as superseded and unmaintained on the page. The
+  newest build is always what the site leads with.
+
+The sync will not move the site backwards. If the release it is asked to publish
+is not newer than the one already advertised — a re-published old tag, or a
+dispatch that arrives out of order — the published record stays where it is, the
+run warns and succeeds, and the history list and feature copy still refresh. Only
+an explicit `--force` (the workflow's **force** input) performs a deliberate
+downgrade.
+
+### Verification
+
+```bash
+npm test                  # decision logic of the sync, from API fixtures
+npm run typecheck
+npm run lint
+npm run build
+npm run verify:downloads  # every published link/checksum is in the built bundle
+```
+
+`npm run verify:downloads` reads the generated record and fails if any published
+download URL, release page URL or SHA-256 is absent from `dist/`. It is the step
+that would catch a download link being hardcoded, dropped or renamed anywhere
+between the sync and the built site, and it runs in the sync workflow too.
 
 ### One-time GitHub setup
 
@@ -54,14 +95,17 @@ present), run:
 
 ```bash
 node scripts/update-release.mjs v1.1.0-build.42 <app-commit-sha>
-npm run typecheck && npm run lint && npm run build
+node scripts/update-release.mjs --discover --dry-run   # report without writing
+npm test && npm run typecheck && npm run lint && npm run build
 ```
 
 `node scripts/update-release.mjs --discover` selects the newest published
-automatic build without calling GitHub's `/releases/latest` endpoint. The sync
-refuses a release that lacks any expected installer, `SHA256SUMS.txt`, an
-API-supplied SHA-256 digest, or a valid feature manifest. It never guesses file
-sizes or checksums.
+complete release without calling GitHub's `/releases/latest` endpoint. The sync
+refuses a newest release that lacks any expected installer, `SHA256SUMS.txt`, an
+API-supplied SHA-256 digest, a permanent asset URL or a valid feature manifest:
+it never guesses file sizes or checksums, and it leaves the site untouched when
+a release is incomplete. An older release that cannot be read completely is
+skipped with a warning instead, so it cannot block a new build from shipping.
 
 ### Feature-copy contract
 

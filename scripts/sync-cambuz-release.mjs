@@ -2,31 +2,54 @@
 /**
  * Synchronise the public Cambuz release metadata into this static site.
  *
- * This script is intentionally driven by a *published, named* release rather
- * than /releases/latest: GitHub does not regard pre-releases as "latest", and
- * an unpinned URL would make the site impossible to audit.
+ * One pass publishes two records:
+ *
+ *   1. `release`        — the complete, audited record of the newest published
+ *                         build. Its asset URLs feed every download link on the
+ *                         home page and the top of the download page.
+ *   2. `releaseHistory` — the older published builds, newest first, so the
+ *                         download page can offer previous versions.
+ *
+ * Both come from GitHub's Releases API; nothing is ever guessed or estimated.
+ * The site deliberately never uses `/releases/latest`: automatic builds are
+ * pre-releases, which that endpoint skips, and an unpinned URL could not be
+ * matched to a published checksum.
+ *
+ * The script is strict about the newest release and tolerant about older ones.
+ * A newest release that is missing an advertised installer fails the run and
+ * leaves the site untouched; an older release whose asset naming has changed is
+ * skipped with a warning, because it must not block a new build from shipping.
  *
  * Usage:
  *   node scripts/sync-cambuz-release.mjs --tag v1.1.0-build.42 --ref <app-commit>
- *   node scripts/sync-cambuz-release.mjs --discover
- *
- * The upstream app owns docs/landing-content.json. It is a small, reviewed
- * product-content manifest that supplies feature-page text and the release
- * notes path. This script gets checksums and byte counts only from GitHub's
- * Releases API, never by estimating or downloading a binary.
+ *   node scripts/sync-cambuz-release.mjs --discover [--history 12] [--dry-run]
  */
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, appendFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const APP_REPOSITORY = 'rajeshkamboj/cambuz-pdf';
+
+/** Repository that owns the application, its builds and its release notes. */
+export const APP_REPOSITORY = 'rajeshkamboj/cambuz-pdf';
+const APP_WEB = `https://github.com/${APP_REPOSITORY}`;
 const API_ROOT = `https://api.github.com/repos/${APP_REPOSITORY}`;
+
 const RELEASE_OUTPUT = join(ROOT, 'src', 'config', 'release.generated.ts');
 const FEATURES_OUTPUT = join(ROOT, 'src', 'data', 'features.generated.ts');
 
-const artifactDefinitions = [
+/** How many older builds the download page offers by default. */
+export const DEFAULT_HISTORY_LIMIT = 12;
+/** Upper bound, so a mistake in configuration cannot bloat the bundle. */
+export const MAX_HISTORY_LIMIT = 50;
+
+/**
+ * Every advertised download, identified by the suffix of its asset name. The
+ * version number in front of the suffix changes with each release, so matching
+ * on the suffix is what keeps this stable across versions.
+ */
+export const artifactDefinitions = [
   { key: 'winX64Setup', suffix: '-win-x64-setup.exe' },
   { key: 'winX64Portable', suffix: '-win-x64-portable.exe' },
   { key: 'linuxX8664AppImage', suffix: '-linux-x86_64.AppImage' },
@@ -34,33 +57,68 @@ const artifactDefinitions = [
   { key: 'macArm64Zip', suffix: '-mac-arm64.zip' },
 ];
 
+class SyncError extends Error {}
+
 function fail(message) {
-  throw new Error(`sync-cambuz-release: ${message}`);
+  throw new SyncError(`sync-cambuz-release: ${message}`);
 }
 
-function parseArguments(args) {
-  const result = { tag: undefined, ref: undefined, discover: false };
+function warn(message) {
+  const prefix = process.env.GITHUB_ACTIONS === 'true' ? '::warning::' : 'warning: ';
+  console.warn(`${prefix}${message}`);
+}
+
+/* ------------------------------------------------------------------ *
+ * Arguments
+ * ------------------------------------------------------------------ */
+
+export function parseArguments(args) {
+  const result = {
+    tag: undefined,
+    ref: undefined,
+    discover: false,
+    history: DEFAULT_HISTORY_LIMIT,
+    dryRun: false,
+    force: false,
+    help: false,
+  };
+
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === '--tag' || argument === '--ref') {
+    if (argument === '--tag' || argument === '--ref' || argument === '--history') {
       const value = args[index + 1];
       if (!value || value.startsWith('--')) fail(`${argument} requires a value`);
-      result[argument.slice(2)] = value;
+      if (argument === '--history') {
+        const limit = Number(value);
+        if (!Number.isInteger(limit) || limit < 0 || limit > MAX_HISTORY_LIMIT) {
+          fail(`--history must be an integer between 0 and ${MAX_HISTORY_LIMIT}`);
+        }
+        result.history = limit;
+      } else {
+        result[argument.slice(2)] = value;
+      }
       index += 1;
     } else if (argument === '--discover') {
       result.discover = true;
+    } else if (argument === '--dry-run') {
+      result.dryRun = true;
+    } else if (argument === '--force') {
+      result.force = true;
     } else if (argument === '--help' || argument === '-h') {
-      console.log('Usage: node scripts/sync-cambuz-release.mjs --tag <tag> --ref <commit>');
-      console.log('       node scripts/sync-cambuz-release.mjs --discover');
-      process.exit(0);
+      result.help = true;
     } else {
       fail(`unknown argument ${argument}`);
     }
   }
+
   if (result.discover && result.tag) fail('use either --discover or --tag, not both');
-  if (!result.discover && !result.tag) fail('pass --tag <tag> or --discover');
+  if (!result.discover && !result.tag && !result.help) fail('pass --tag <tag> or --discover');
   return result;
 }
+
+/* ------------------------------------------------------------------ *
+ * GitHub access
+ * ------------------------------------------------------------------ */
 
 function headers() {
   const result = {
@@ -87,10 +145,18 @@ async function getJson(url) {
   return response.json();
 }
 
-function versionFromTag(tag) {
-  const match = /^v(\d+\.\d+\.\d+)(?:-[0-9A-Za-z.-]+)?$/.exec(tag);
-  if (!match) fail(`"${tag}" is not a supported version tag`);
+/* ------------------------------------------------------------------ *
+ * Reading one release
+ * ------------------------------------------------------------------ */
+
+export function versionFromTag(tag) {
+  const match = /^v(\d+\.\d+\.\d+)(?:-[0-9A-Za-z.-]+)?$/.exec(tag ?? '');
+  if (!match) return null;
   return match[1];
+}
+
+export function isAutomaticBuildTag(tag) {
+  return /^v\d+\.\d+\.\d+-build\.\d+$/.test(tag ?? '');
 }
 
 function digestFor(asset) {
@@ -99,11 +165,11 @@ function digestFor(asset) {
   return match[1].toLowerCase();
 }
 
-function releaseArtifact(asset) {
+function releaseAsset(asset) {
   if (!asset || typeof asset.name !== 'string' || !Number.isSafeInteger(asset.size)) {
     fail('release returned an invalid asset record');
   }
-  if (!/^https:\/\/github\.com\/rajeshkamboj\/cambuz-pdf\/releases\/download\//.test(asset.browser_download_url)) {
+  if (!new RegExp(`^https://github\\.com/${APP_REPOSITORY}/releases/download/`).test(asset.browser_download_url)) {
     fail(`${asset.name} does not have the expected permanent GitHub download URL`);
   }
   return {
@@ -114,36 +180,141 @@ function releaseArtifact(asset) {
   };
 }
 
-function releaseData(release) {
+/**
+ * Reads one release into the shape the site consumes.
+ *
+ * Throws for anything the site must not publish: an unrecognised tag, a missing
+ * or duplicated installer, a missing `SHA256SUMS.txt`, an asset without a
+ * GitHub-supplied digest, or a download URL that is not a permanent GitHub
+ * release URL.
+ */
+export function releaseData(release) {
   if (!release || typeof release.tag_name !== 'string' || !Array.isArray(release.assets)) {
     fail('release response is missing a tag or its assets');
   }
   const version = versionFromTag(release.tag_name);
+  if (!version) fail(`"${release.tag_name}" is not a supported version tag`);
+
   const assets = new Map(release.assets.map((asset) => [asset.name, asset]));
-  const output = {};
+  const artifacts = {};
 
   for (const definition of artifactDefinitions) {
     const matches = release.assets.filter((asset) => asset.name?.endsWith(definition.suffix));
     if (matches.length !== 1) {
-      fail(`expected exactly one ${definition.suffix} asset; found ${matches.length}`);
+      fail(
+        `${release.tag_name}: expected exactly one ${definition.suffix} asset; found ${matches.length}`
+      );
     }
-    output[definition.key] = releaseArtifact(matches[0]);
+    artifacts[definition.key] = releaseAsset(matches[0]);
   }
 
   const checksums = assets.get('SHA256SUMS.txt');
-  if (!checksums) fail('release is missing SHA256SUMS.txt');
-  output.checksums = releaseArtifact(checksums);
+  if (!checksums) fail(`${release.tag_name}: release is missing SHA256SUMS.txt`);
+  artifacts.checksums = releaseAsset(checksums);
 
+  const target = typeof release.target_commitish === 'string' ? release.target_commitish : '';
   return {
     tag: release.tag_name,
     version,
     prerelease: Boolean(release.prerelease),
-    automaticBuild: /^v\d+\.\d+\.\d+-build\.\d+$/.test(release.tag_name),
-    publishedAt: release.published_at,
-    sourceCommit: release.target_commitish,
-    artifacts: output,
+    automaticBuild: isAutomaticBuildTag(release.tag_name),
+    publishedAt: typeof release.published_at === 'string' ? release.published_at : null,
+    // `target_commitish` is the released commit for CI builds, but it is the
+    // literal string "main" for tags pushed by hand. Only a real SHA is
+    // published, so the site never claims a commit it cannot point at.
+    sourceCommit: /^[0-9a-f]{40}$/i.test(target) ? target : null,
+    releasePageUrl: `${APP_WEB}/releases/tag/${encodeURIComponent(release.tag_name)}`,
+    artifacts,
   };
 }
+
+/** `releaseData` for a release that may legitimately be skipped. */
+export function tryReleaseData(release) {
+  try {
+    return { data: releaseData(release) };
+  } catch (error) {
+    return { error: error instanceof SyncError ? error.message : String(error.message ?? error) };
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Choosing the newest release, and everything older
+ * ------------------------------------------------------------------ */
+
+function publishedTime(value) {
+  const time = Date.parse(value ?? '');
+  return Number.isNaN(time) ? null : time;
+}
+
+/** Newest first; ties are broken by tag so the output is deterministic. */
+export function byPublishedDescending(a, b) {
+  const left = publishedTime(a.publishedAt) ?? 0;
+  const right = publishedTime(b.publishedAt) ?? 0;
+  if (left !== right) return right - left;
+  return b.tag.localeCompare(a.tag);
+}
+
+/**
+ * Every published release the site can serve completely, newest first.
+ * Drafts and releases without a full installer set are reported, not published.
+ */
+export function collectReleases(releases) {
+  const candidates = [];
+  const skipped = [];
+
+  for (const release of releases) {
+    if (!release || release.draft) continue;
+    const tag = release.tag_name;
+    if (typeof tag !== 'string' || !versionFromTag(tag)) {
+      skipped.push({ tag: String(tag ?? '(untitled)'), reason: 'tag is not a Cambuz version' });
+      continue;
+    }
+    const { data, error } = tryReleaseData(release);
+    if (error) {
+      skipped.push({ tag, reason: error.replace(/^sync-cambuz-release: /, '') });
+      continue;
+    }
+    candidates.push(data);
+  }
+
+  return { candidates: candidates.sort(byPublishedDescending), skipped };
+}
+
+/** The newest build must be newer than what the site already advertises. */
+export function isNewer(candidate, current) {
+  const candidateTime = publishedTime(candidate?.publishedAt);
+  const currentTime = publishedTime(current?.publishedAt);
+  if (candidateTime === null) return false;
+  if (currentTime === null) return true;
+  return candidateTime > currentTime;
+}
+
+/**
+ * True when publishing `candidate` would move the site to an older release.
+ *
+ * Re-syncing the same tag is never a downgrade: only the history list and the
+ * feature copy may have moved on. A dispatch that arrives out of order, or a
+ * hand-picked older tag, therefore cannot push an older build in front of
+ * visitors; only an explicit --force can.
+ */
+export function isDowngrade(candidate, previous) {
+  if (!candidate || !previous) return false;
+  if (candidate.tag === previous.tag) return false;
+  return !isNewer(candidate, previous);
+}
+
+/** Older builds for the download page, newest first, never including the latest. */
+export function buildHistory(candidates, latestTag, limit = DEFAULT_HISTORY_LIMIT) {
+  if (limit === 0) return [];
+  return candidates
+    .filter((candidate) => candidate.tag !== latestTag)
+    .sort(byPublishedDescending)
+    .slice(0, limit);
+}
+
+/* ------------------------------------------------------------------ *
+ * Upstream feature manifest
+ * ------------------------------------------------------------------ */
 
 function validateString(value, label, { min = 1, max = 600 } = {}) {
   if (typeof value !== 'string' || value.trim().length < min || value.length > max) {
@@ -152,7 +323,7 @@ function validateString(value, label, { min = 1, max = 600 } = {}) {
   return value.trim();
 }
 
-function validateFeatureManifest(value) {
+export function validateFeatureManifest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     fail('upstream landing-content.json must be an object');
   }
@@ -216,54 +387,217 @@ async function manifestAt(ref) {
   return validateFeatureManifest(parsed);
 }
 
+/* ------------------------------------------------------------------ *
+ * Generated modules
+ * ------------------------------------------------------------------ */
+
 function typescriptValue(value) {
   return JSON.stringify(value, null, 2);
 }
 
-function releaseModule(data, manifest) {
-  const base = `https://github.com/${APP_REPOSITORY}`;
-  const output = {
+export function releaseModule(data, history, manifest) {
+  const release = {
     ...data,
-    releaseNotesUrl: `${base}/blob/main/${manifest.releaseNotesPath}`,
+    releaseNotesUrl: `${APP_WEB}/blob/main/${manifest.releaseNotesPath}`,
   };
-  return `/*\n * Generated by scripts/sync-cambuz-release.mjs from the published GitHub\n * Release. Do not edit this file by hand: the sync workflow replaces it after\n * every successful Cambuz app build.\n */\n\nexport const release = ${typescriptValue(output)} as const;\n`;
+  const header = [
+    '/*',
+    ' * Generated by scripts/sync-cambuz-release.mjs from the published GitHub',
+    ' * Releases. Do not edit this file by hand: the sync workflow replaces it',
+    ' * after every successful Cambuz app build.',
+    ' *',
+    ' * release        - the newest published build. Every download link on the',
+    ' *                  home page and the download page points at these URLs.',
+    ' * releaseHistory - older published builds, newest first, so the download',
+    ' *                  page can offer previous versions. A release disappears',
+    ' *                  from this list when it is deleted upstream.',
+    ' */',
+    '',
+  ].join('\n');
+
+  const historyComment = [
+    '/**',
+    ' * Previous published builds, newest first. These are kept for rollback and',
+    ' * troubleshooting: each one is the exact CI-published asset set with the',
+    ' * checksum GitHub reported for it. They are not maintained or patched.',
+    ' */',
+  ].join('\n');
+
+  return `${header}export const release = ${typescriptValue(release)} as const;
+
+${historyComment}
+export const releaseHistory = ${typescriptValue(history)} as const;
+`;
 }
 
-function featuresModule(features) {
-  return `/*\n * Generated from cambuz-pdf/docs/landing-content.json by\n * scripts/sync-cambuz-release.mjs. Change feature copy in the app repository,\n * then let the release sync publish it here.\n */\n\nimport type { Feature } from './features';\n\nexport const generatedFeatures = ${typescriptValue(features)} satisfies readonly Feature[];\n`;
+export function featuresModule(features) {
+  return `/*
+ * Generated from cambuz-pdf/docs/landing-content.json by
+ * scripts/sync-cambuz-release.mjs. Change feature copy in the app repository,
+ * then let the release sync publish it here.
+ */
+
+import type { Feature } from './features';
+
+export const generatedFeatures = ${typescriptValue(features)} satisfies readonly Feature[];
+`;
 }
 
-async function discoverRelease() {
-  const releases = await getJson(`${API_ROOT}/releases?per_page=30`);
-  const candidate = releases.find(
-    (release) =>
-      !release.draft &&
-      /^v\d+\.\d+\.\d+-build\.\d+$/.test(release.tag_name ?? '') &&
-      Array.isArray(release.assets) &&
-      release.assets.some((asset) => asset.name === 'SHA256SUMS.txt')
-  );
-  if (!candidate) fail('no published automatic build release was found');
-  return candidate;
+/* ------------------------------------------------------------------ *
+ * Current state of the site
+ * ------------------------------------------------------------------ */
+
+/**
+ * Reads the release the site currently advertises, straight from the generated
+ * module (which is plain data, so no TypeScript loader is needed). Returns null
+ * on a first run, when the file does not exist yet.
+ */
+export async function readCurrentRelease(path = RELEASE_OUTPUT) {
+  let text;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  const tag = /"tag":\s*"([^"]+)"/.exec(text)?.[1];
+  const publishedAt = /"publishedAt":\s*"([^"]+)"/.exec(text)?.[1] ?? null;
+  if (!tag) return null;
+  return { tag, publishedAt };
 }
+
+async function writeStepOutputs(values) {
+  const path = process.env.GITHUB_OUTPUT;
+  if (!path) return;
+  const lines = Object.entries(values)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+  await appendFile(path, `${lines}\n`);
+}
+
+/* ------------------------------------------------------------------ *
+ * Run
+ * ------------------------------------------------------------------ */
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const release = options.discover
-    ? await discoverRelease()
-    : await getJson(`${API_ROOT}/releases/tags/${encodeURIComponent(options.tag)}`);
-  const data = releaseData(release);
-  const manifest = await manifestAt(options.ref ?? release.target_commitish ?? 'main');
+  if (options.help) {
+    console.log('Usage: node scripts/sync-cambuz-release.mjs --tag <tag> [--ref <commit>]');
+    console.log('       node scripts/sync-cambuz-release.mjs --discover [--history <n>]');
+    console.log('');
+    console.log('  --tag <tag>        publish this exact published release as the newest');
+    console.log('  --ref <commit>     app commit holding docs/landing-content.json');
+    console.log('  --discover         publish the newest complete published release');
+    console.log(`  --history <n>      older builds to list (default ${DEFAULT_HISTORY_LIMIT}, max ${MAX_HISTORY_LIMIT})`);
+    console.log('  --force            allow --tag to replace the published release with an older one');
+    console.log('  --dry-run          report what would change without writing files');
+    return;
+  }
+
+  const previous = await readCurrentRelease();
+  if (previous) console.log(`Site currently advertises ${previous.tag}.`);
+
+  const listed = await getJson(`${API_ROOT}/releases?per_page=100`);
+  if (!Array.isArray(listed)) fail('release list response is not an array');
+  const { candidates, skipped } = collectReleases(listed);
+  for (const entry of skipped) warn(`skipping ${entry.tag}: ${entry.reason}`);
+
+  let latest;
+  let manifestRef;
+
+  if (options.tag) {
+    const release = await getJson(`${API_ROOT}/releases/tags/${encodeURIComponent(options.tag)}`);
+    const requested = releaseData(release);
+
+    // An explicitly named release is normally the one the app just published,
+    // but a stale or out-of-order dispatch must not move the site backwards.
+    // In that case the published record stays where it is and the history and
+    // feature copy still refresh; --force performs a deliberate downgrade.
+    if (!options.force && isDowngrade(requested, previous)) {
+      const current = candidates.find((entry) => entry.tag === previous.tag);
+      if (!current) {
+        fail(
+          `refusing to replace the published ${previous.tag} with the older ${requested.tag}, ` +
+            `and ${previous.tag} is not available from the API to keep; ` +
+            'pass --force if that downgrade is deliberate'
+        );
+      }
+      warn(
+        `${requested.tag} is older than the release this site already serves ` +
+          `(${previous.tag}); keeping ${previous.tag}. Pass --force to downgrade deliberately.`
+      );
+      latest = current;
+    } else {
+      latest = requested;
+    }
+
+    const listedRelease = listed.find((entry) => entry.tag_name === latest.tag);
+    manifestRef =
+      options.ref ??
+      listedRelease?.target_commitish ??
+      (latest.tag === requested.tag ? release.target_commitish : undefined) ??
+      'main';
+  } else {
+    const newest = candidates[0];
+    if (!newest) fail('no complete, published Cambuz release was found');
+
+    // The site never moves backwards on its own. If the newest complete release
+    // is not newer than the one already advertised — a re-published old tag, for
+    // example — the published record stays as it is while the history list and
+    // the feature copy still refresh.
+    const current = previous ? candidates.find((entry) => entry.tag === previous.tag) : undefined;
+    latest = current && !isNewer(newest, current) ? current : newest;
+    if (current && latest.tag === current.tag && newest.tag !== current.tag) {
+      console.log(`Keeping ${current.tag}: ${newest.tag} is not newer than the published release.`);
+    }
+    if (previous && !current && latest.tag !== previous.tag) {
+      warn(
+        `${previous.tag} is no longer a published release; falling back to ${latest.tag}`
+      );
+    }
+
+    const listedRelease = listed.find((entry) => entry.tag_name === latest.tag);
+    manifestRef = options.ref ?? listedRelease?.target_commitish ?? 'main';
+  }
+
+  const history = buildHistory(candidates, latest.tag, options.history);
+  const manifest = await manifestAt(manifestRef);
+
+  console.log(`Publishing ${latest.tag} (${latest.version}) from ${APP_REPOSITORY}.`);
+  console.log(
+    `Verified ${artifactDefinitions.length} installers and SHA256SUMS.txt; ` +
+      `${history.length} previous version${history.length === 1 ? '' : 's'} listed.`
+  );
+  if (history.length) console.log(`Previous: ${history.map((entry) => entry.tag).join(', ')}`);
+
+  const changed = previous?.tag !== latest.tag;
+  await writeStepOutputs({
+    tag: latest.tag,
+    version: latest.version,
+    previous_tag: previous?.tag ?? '',
+    history_count: history.length,
+    latest_changed: changed,
+  });
+
+  if (options.dryRun) {
+    console.log('Dry run: no files were written.');
+    return;
+  }
 
   await Promise.all([
-    writeFile(RELEASE_OUTPUT, releaseModule(data, manifest)),
+    writeFile(RELEASE_OUTPUT, releaseModule(latest, history, manifest)),
     writeFile(FEATURES_OUTPUT, featuresModule(manifest.features)),
   ]);
-
-  console.log(`Synced ${data.tag} (${data.version}) from ${APP_REPOSITORY}.`);
-  console.log(`Verified ${artifactDefinitions.length} installers, SHA256SUMS.txt and ${manifest.features.length} features.`);
+  console.log(`Wrote ${RELEASE_OUTPUT.replace(`${ROOT}/`, '')} and ${FEATURES_OUTPUT.replace(`${ROOT}/`, '')}.`);
 }
 
-main().catch((error) => {
-  console.error(error.message ?? String(error));
-  process.exitCode = 1;
-});
+const invokedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().catch((error) => {
+    console.error(error.message ?? String(error));
+    process.exitCode = 1;
+  });
+}

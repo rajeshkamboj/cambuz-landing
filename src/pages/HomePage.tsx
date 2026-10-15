@@ -138,13 +138,13 @@ export function HomePage() {
               className="mt-4 text-sm text-text-secondary animate-fade-in-up"
               style={{ animationDelay: '0.25s' }}
             >
-              {formatMiB(recommendedDownload.bytes)} installer · v
-              {siteConfig.version} pre-release, unsigned ·{' '}
+              {formatMiB(recommendedDownload.bytes)} installer ·{' '}
+              {siteConfig.releaseTag} pre-release, unsigned ·{' '}
               <Link
                 to="/download/"
                 className="text-accent hover:text-primary transition-colors"
               >
-                portable, Linux and macOS builds
+                all platforms and previous versions
               </Link>
             </p>
 
