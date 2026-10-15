@@ -51,11 +51,12 @@ build, which means:
 - older builds are labelled as superseded and unmaintained on the page. The
   newest build is always what the site leads with.
 
-The sync will not move the site backwards on its own. If the newest complete
-release is not newer than the one already advertised, the published record stays
-where it is while the history and feature copy still refresh. Naming an older
-tag explicitly with `--tag` fails unless `--force` (or the workflow's **force**
-input) is used.
+The sync will not move the site backwards. If the release it is asked to publish
+is not newer than the one already advertised — a re-published old tag, or a
+dispatch that arrives out of order — the published record stays where it is, the
+run warns and succeeds, and the history list and feature copy still refresh. Only
+an explicit `--force` (the workflow's **force** input) performs a deliberate
+downgrade.
 
 ### Verification
 

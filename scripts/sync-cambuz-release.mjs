@@ -290,18 +290,17 @@ export function isNewer(candidate, current) {
 }
 
 /**
- * Refuses to replace the published release with an older one unless the caller
- * says so explicitly. Re-syncing the same tag is always allowed: only the
- * history list and the feature copy may have moved.
+ * True when publishing `candidate` would move the site to an older release.
+ *
+ * Re-syncing the same tag is never a downgrade: only the history list and the
+ * feature copy may have moved on. A dispatch that arrives out of order, or a
+ * hand-picked older tag, therefore cannot push an older build in front of
+ * visitors; only an explicit --force can.
  */
-export function assertNoDowngrade(latest, previous, force = false) {
-  if (!latest || !previous || force) return;
-  if (latest.tag === previous.tag) return;
-  if (isNewer(latest, previous)) return;
-  fail(
-    `refusing to replace the published ${previous.tag} with the older ${latest.tag}; ` +
-      'pass --force if that downgrade is deliberate'
-  );
+export function isDowngrade(candidate, previous) {
+  if (!candidate || !previous) return false;
+  if (candidate.tag === previous.tag) return false;
+  return !isNewer(candidate, previous);
 }
 
 /** Older builds for the download page, newest first, never including the latest. */
@@ -509,13 +508,36 @@ async function main() {
 
   if (options.tag) {
     const release = await getJson(`${API_ROOT}/releases/tags/${encodeURIComponent(options.tag)}`);
-    latest = releaseData(release);
-    manifestRef = options.ref ?? release.target_commitish ?? 'main';
+    const requested = releaseData(release);
 
-    // An explicitly named release is normally the one the app just published.
-    // Re-syncing the current tag is fine (the history may have moved on), but
-    // silently putting an older build back in front of visitors is not.
-    assertNoDowngrade(latest, previous, options.force);
+    // An explicitly named release is normally the one the app just published,
+    // but a stale or out-of-order dispatch must not move the site backwards.
+    // In that case the published record stays where it is and the history and
+    // feature copy still refresh; --force performs a deliberate downgrade.
+    if (!options.force && isDowngrade(requested, previous)) {
+      const current = candidates.find((entry) => entry.tag === previous.tag);
+      if (!current) {
+        fail(
+          `refusing to replace the published ${previous.tag} with the older ${requested.tag}, ` +
+            `and ${previous.tag} is not available from the API to keep; ` +
+            'pass --force if that downgrade is deliberate'
+        );
+      }
+      warn(
+        `${requested.tag} is older than the release this site already serves ` +
+          `(${previous.tag}); keeping ${previous.tag}. Pass --force to downgrade deliberately.`
+      );
+      latest = current;
+    } else {
+      latest = requested;
+    }
+
+    const listedRelease = listed.find((entry) => entry.tag_name === latest.tag);
+    manifestRef =
+      options.ref ??
+      listedRelease?.target_commitish ??
+      (latest.tag === requested.tag ? release.target_commitish : undefined) ??
+      'main';
   } else {
     const newest = candidates[0];
     if (!newest) fail('no complete, published Cambuz release was found');

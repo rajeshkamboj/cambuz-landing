@@ -51,18 +51,44 @@ is labelled "release candidate" and an automatic build "automatic build".
 
 ## 2. Backwards protection
 
+An explicitly named release that is older than the one already advertised keeps
+the published release and warns, rather than failing the run: a `repository_dispatch`
+that arrives out of order, or a duplicate one, must not turn the workflow red for
+a situation that needs no action.
+
 ```console
 $ node scripts/sync-cambuz-release.mjs --tag v1.1.0-build.53 --ref main --dry-run
-sync-cambuz-release: refusing to replace the published v1.1.0-build.77 with the
-older v1.1.0-build.53; pass --force if that downgrade is deliberate   [exit 1]
+Site currently advertises v1.1.0-build.77.
+warning: v1.1.0-build.53 is older than the release this site already serves
+(v1.1.0-build.77); keeping v1.1.0-build.77. Pass --force to downgrade deliberately.
+Publishing v1.1.0-build.77 (1.1.0) from rajeshkamboj/cambuz-pdf.
+Verified 5 installers and SHA256SUMS.txt; 2 previous versions listed.
+Previous: v1.1.0-build.53, v1.1.0-rc1                                  [exit 0]
+```
 
+Re-syncing the tag that is already published is a normal no-op run, and the
+history and feature copy still refresh:
+
+```console
 $ node scripts/sync-cambuz-release.mjs --tag v1.1.0-build.77 --ref <sha> --dry-run
-Publishing v1.1.0-build.77 (1.1.0) ...                                [exit 0]
+Publishing v1.1.0-build.77 (1.1.0) ...                                 [exit 0]
+```
 
+Only `--force` (or the workflow's **force** input) moves the site to an older
+build, and then the older build becomes the newest and is removed from the
+history list:
+
+```console
 $ node scripts/sync-cambuz-release.mjs --tag v1.1.0-build.53 --ref main --force --dry-run
 Publishing v1.1.0-build.53 (1.1.0) ...
-Previous: v1.1.0-build.77, v1.1.0-rc1                                 [exit 0]
+Previous: v1.1.0-build.77, v1.1.0-rc1                                  [exit 0]
 ```
+
+The same rule covers the automatic `--discover` path, which never downgrades at
+all: if the newest complete release is not newer than the published one, the
+published record is kept. If the published release disappears from the API
+entirely, it warns and falls back to the newest release that still exists, since
+serving a deleted release would publish dead links.
 
 ## 3. The rendered pages carry the published links
 

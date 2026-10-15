@@ -15,7 +15,7 @@ import { join } from 'node:path';
 
 import {
   DEFAULT_HISTORY_LIMIT,
-  assertNoDowngrade,
+  isDowngrade,
   buildHistory,
   byPublishedDescending,
   collectReleases,
@@ -241,18 +241,21 @@ test('arguments are validated', () => {
   assert.equal(parseArguments(['--help']).help, true);
 });
 
-test('an explicitly named older release is refused unless forced', () => {
+test('an older release is a downgrade unless it is forced', () => {
   const published = { tag: 'v1.1.0-build.77', publishedAt: '2026-10-15T05:54:01Z' };
   const older = { tag: 'v1.1.0-build.53', publishedAt: '2026-10-12T01:10:12Z' };
+  const newer = { tag: 'v1.1.0-build.99', publishedAt: '2026-10-16T05:54:01Z' };
+  const republished = { tag: 'v1.1.0-build.53', publishedAt: '2026-10-16T00:00:00Z' };
 
   // Re-syncing what is already published is a no-op, not a downgrade.
-  assert.doesNotThrow(() => assertNoDowngrade(published, published));
-  assert.doesNotThrow(() => assertNoDowngrade(older, published, true));
-  assert.doesNotThrow(() => assertNoDowngrade(older, null));
-  assert.throws(
-    () => assertNoDowngrade(older, published),
-    /refusing to replace the published v1\.1\.0-build\.77/
-  );
+  assert.equal(isDowngrade(published, published), false);
+  assert.equal(isDowngrade(newer, published), false);
+  // GitHub calling a re-published old tag newer makes it the newest release.
+  assert.equal(isDowngrade(republished, published), false);
+  // A stale or out-of-order dispatch is a downgrade, so it keeps the site put.
+  assert.equal(isDowngrade(older, published), true);
+  // Nothing to publish means nothing to compare against.
+  assert.equal(isDowngrade(older, null), false);
 });
 
 test('generated module carries the latest build and the history', () => {
