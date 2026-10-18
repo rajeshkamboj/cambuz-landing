@@ -10,49 +10,49 @@
  *                  from this list when it is deleted upstream.
  */
 export const release = {
-  "tag": "v1.1.0-build.77",
+  "tag": "v1.1.0-build.80",
   "version": "1.1.0",
   "prerelease": true,
   "automaticBuild": true,
-  "publishedAt": "2026-10-15T05:54:01Z",
-  "sourceCommit": "f61be45032a0cddd3005c5e6afb52ecacc156012",
-  "releasePageUrl": "https://github.com/rajeshkamboj/cambuz-pdf/releases/tag/v1.1.0-build.77",
+  "publishedAt": "2026-10-18T05:30:28Z",
+  "sourceCommit": "471add0653679e71a2895942a7aa39e9a939e89e",
+  "releasePageUrl": "https://github.com/rajeshkamboj/cambuz-pdf/releases/tag/v1.1.0-build.80",
   "artifacts": {
     "winX64Setup": {
       "fileName": "Cambuz-PDF-Reader-1.1.0-win-x64-setup.exe",
-      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-win-x64-setup.exe",
-      "bytes": 102043495,
-      "sha256": "6c69c49b6a906ec4799277bf5af53f73369f3ef8bd6d74842d474215932ca084"
+      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.80/Cambuz-PDF-Reader-1.1.0-win-x64-setup.exe",
+      "bytes": 102046297,
+      "sha256": "65f3b1812789a544fca7851ab7e7d22c026acf7a7130d053475522c629d24a94"
     },
     "winX64Portable": {
       "fileName": "Cambuz-PDF-Reader-1.1.0-win-x64-portable.exe",
-      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-win-x64-portable.exe",
-      "bytes": 101625713,
-      "sha256": "6f2f8ba2959d8f2c2440c2b7e4d49599b0c77ffed848e79e1c28251c3847ab2a"
+      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.80/Cambuz-PDF-Reader-1.1.0-win-x64-portable.exe",
+      "bytes": 101628516,
+      "sha256": "66293637d0d23317031fc922a132fdc14ef09f01d9ecf9f777a074953c2a29c5"
     },
     "linuxX8664AppImage": {
       "fileName": "Cambuz-PDF-Reader-1.1.0-linux-x86_64.AppImage",
-      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-linux-x86_64.AppImage",
-      "bytes": 97509736,
-      "sha256": "958174bbd03ff65c96a107b7599f1fa68d62087bd9bf81fef14b0ae5bab46304"
+      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.80/Cambuz-PDF-Reader-1.1.0-linux-x86_64.AppImage",
+      "bytes": 97509919,
+      "sha256": "ea8cec44863bd1bd2fa16b24b76b5149660a358653f7d07365ae3ab25f506f8e"
     },
     "macArm64Dmg": {
       "fileName": "Cambuz-PDF-Reader-1.1.0-mac-arm64.dmg",
-      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-mac-arm64.dmg",
-      "bytes": 111902143,
-      "sha256": "93f87190f3ae23af1422c6a21c5b9e0445d6feef2d29b23be3de8e4c14e7b41a"
+      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.80/Cambuz-PDF-Reader-1.1.0-mac-arm64.dmg",
+      "bytes": 111889578,
+      "sha256": "1f85c200f04d87afec3c0c6d1b11f663cd4de7feb654dc2a6384aa515086c526"
     },
     "macArm64Zip": {
       "fileName": "Cambuz-PDF-Reader-1.1.0-mac-arm64.zip",
-      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-mac-arm64.zip",
-      "bytes": 116824325,
-      "sha256": "45a02e3e78712a20e263aa71f2c7e9d1bed43ab940294ba3030ed893d8752009"
+      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.80/Cambuz-PDF-Reader-1.1.0-mac-arm64.zip",
+      "bytes": 116827235,
+      "sha256": "9574ca8c50b7304919ae2f7fa765d9a160e268c93859d542a7f28729b182f8be"
     },
     "checksums": {
       "fileName": "SHA256SUMS.txt",
-      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/SHA256SUMS.txt",
+      "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.80/SHA256SUMS.txt",
       "bytes": 539,
-      "sha256": "6b08be5400babf2493dce19ef625bb46a21b40c035019f25a87308b190502d27"
+      "sha256": "b9f9a13dc40338d20629384e7095b02f31e944d2d13805dfb101efca24511660"
     }
   },
   "releaseNotesUrl": "https://github.com/rajeshkamboj/cambuz-pdf/blob/main/docs/RELEASE-NOTES-1.1.0.md"
@@ -64,6 +64,53 @@ export const release = {
  * checksum GitHub reported for it. They are not maintained or patched.
  */
 export const releaseHistory = [
+  {
+    "tag": "v1.1.0-build.77",
+    "version": "1.1.0",
+    "prerelease": true,
+    "automaticBuild": true,
+    "publishedAt": "2026-10-15T05:54:01Z",
+    "sourceCommit": "f61be45032a0cddd3005c5e6afb52ecacc156012",
+    "releasePageUrl": "https://github.com/rajeshkamboj/cambuz-pdf/releases/tag/v1.1.0-build.77",
+    "artifacts": {
+      "winX64Setup": {
+        "fileName": "Cambuz-PDF-Reader-1.1.0-win-x64-setup.exe",
+        "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-win-x64-setup.exe",
+        "bytes": 102043495,
+        "sha256": "6c69c49b6a906ec4799277bf5af53f73369f3ef8bd6d74842d474215932ca084"
+      },
+      "winX64Portable": {
+        "fileName": "Cambuz-PDF-Reader-1.1.0-win-x64-portable.exe",
+        "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-win-x64-portable.exe",
+        "bytes": 101625713,
+        "sha256": "6f2f8ba2959d8f2c2440c2b7e4d49599b0c77ffed848e79e1c28251c3847ab2a"
+      },
+      "linuxX8664AppImage": {
+        "fileName": "Cambuz-PDF-Reader-1.1.0-linux-x86_64.AppImage",
+        "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-linux-x86_64.AppImage",
+        "bytes": 97509736,
+        "sha256": "958174bbd03ff65c96a107b7599f1fa68d62087bd9bf81fef14b0ae5bab46304"
+      },
+      "macArm64Dmg": {
+        "fileName": "Cambuz-PDF-Reader-1.1.0-mac-arm64.dmg",
+        "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-mac-arm64.dmg",
+        "bytes": 111902143,
+        "sha256": "93f87190f3ae23af1422c6a21c5b9e0445d6feef2d29b23be3de8e4c14e7b41a"
+      },
+      "macArm64Zip": {
+        "fileName": "Cambuz-PDF-Reader-1.1.0-mac-arm64.zip",
+        "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/Cambuz-PDF-Reader-1.1.0-mac-arm64.zip",
+        "bytes": 116824325,
+        "sha256": "45a02e3e78712a20e263aa71f2c7e9d1bed43ab940294ba3030ed893d8752009"
+      },
+      "checksums": {
+        "fileName": "SHA256SUMS.txt",
+        "url": "https://github.com/rajeshkamboj/cambuz-pdf/releases/download/v1.1.0-build.77/SHA256SUMS.txt",
+        "bytes": 539,
+        "sha256": "6b08be5400babf2493dce19ef625bb46a21b40c035019f25a87308b190502d27"
+      }
+    }
+  },
   {
     "tag": "v1.1.0-build.53",
     "version": "1.1.0",
